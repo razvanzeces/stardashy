@@ -31,14 +31,27 @@ fi
 command -v php >/dev/null || say "WARNING: php not found — the dashboard needs php-fpm/php-cli + php-sqlite3"
 
 # ---------- files ----------
-say "installing to ${DEST}"
-mkdir -p "$DEST"
-for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py; do
-  install -m 0755 "$SRC/$f" "$DEST/$f"
-done
-install -m 0644 "$SRC/VERSION" "$DEST/VERSION"
-mkdir -p "$DEST/www"
-cp -r "$SRC/www/." "$DEST/www/"
+# Running the installer from inside the install directory (a clone made
+# straight into $DEST) is supported: there is simply nothing to copy.
+if [ "$SRC" = "$DEST" ]; then
+  say "running from ${DEST} — updating permissions only"
+  chmod 0755 "$DEST"/*.py "$DEST"/install.sh "$DEST"/uninstall.sh 2>/dev/null || true
+else
+  say "installing to ${DEST}"
+  mkdir -p "$DEST"
+  for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py; do
+    install -m 0755 "$SRC/$f" "$DEST/$f"
+  done
+  install -m 0644 "$SRC/VERSION" "$DEST/VERSION"
+  mkdir -p "$DEST/www"
+  cp -r "$SRC/www/." "$DEST/www/"
+  # Ship the installer, uninstaller and unit sources too, so the install
+  # directory is self-contained and can be re-run or removed on its own.
+  install -m 0755 "$SRC/install.sh" "$DEST/install.sh"
+  install -m 0755 "$SRC/uninstall.sh" "$DEST/uninstall.sh"
+  mkdir -p "$DEST/systemd"
+  cp "$SRC"/systemd/*.service "$SRC"/systemd/*.timer "$SRC"/systemd/*.path "$DEST/systemd/"
+fi
 
 mkdir -p "$DEST/data"
 if [ ! -f "$DEST/data/config.json" ]; then
