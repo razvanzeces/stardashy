@@ -105,6 +105,8 @@ The web server never writes program files itself — it only queues a request th
 
 Your database, `config.json` and admin password are untouched by an update. The previous version is kept in `data/.update-backup` in case you need to restore it by hand.
 
+Non-standard layout? `install.sh` honours `CFSPEED_DEST` (install path), `CFSPEED_UNITDIR` (systemd unit directory) and `CFSPEED_WEBGROUP` (web server group).
+
 Prefer doing it yourself? That works too:
 
 ```bash

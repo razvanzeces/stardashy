@@ -9,6 +9,7 @@ import sys
 
 BASE = os.environ.get("CFSPEED_HOME") or os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(BASE, "data", "config.json")
+UNITDIR = os.environ.get("CFSPEED_UNITDIR") or "/etc/systemd/system"
 
 
 def load():
@@ -28,7 +29,7 @@ def clamp(v, lo, hi, dflt):
 
 
 def write_override(unit, body):
-    d = f"/etc/systemd/system/{unit}.d"
+    d = os.path.join(UNITDIR, f"{unit}.d")
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "override.conf"), "w") as f:
         f.write(body)

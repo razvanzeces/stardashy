@@ -7,6 +7,7 @@ set -euo pipefail
 DEST="${CFSPEED_DEST:-/opt/cfspeed}"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 WEBGROUP="${CFSPEED_WEBGROUP:-www-data}"
+UNITDIR="${CFSPEED_UNITDIR:-/etc/systemd/system}"
 
 say(){ printf '\033[1m[cfspeed]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[cfspeed]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -67,9 +68,15 @@ fi
 
 # ---------- systemd ----------
 say "installing systemd units"
-cp "$SRC"/systemd/*.service "$SRC"/systemd/*.timer "$SRC"/systemd/*.path /etc/systemd/system/
+mkdir -p "$UNITDIR"
+cp "$SRC"/systemd/*.service "$SRC"/systemd/*.timer "$SRC"/systemd/*.path "$UNITDIR"/
 if [ "$DEST" != "/opt/cfspeed" ]; then
-  sed -i "s|/opt/cfspeed|$DEST|g" /etc/systemd/system/cfspeed*.service /etc/systemd/system/cfspeed*.path
+  # sed -i needs an argument on BSD/macOS; GNU sed rejects it, so branch
+  if sed --version >/dev/null 2>&1; then
+    sed -i    "s|/opt/cfspeed|$DEST|g" "$UNITDIR"/cfspeed*.service "$UNITDIR"/cfspeed*.path
+  else
+    sed -i '' "s|/opt/cfspeed|$DEST|g" "$UNITDIR"/cfspeed*.service "$UNITDIR"/cfspeed*.path
+  fi
 fi
 systemctl daemon-reload
 systemctl enable --now cfspeed.timer cfspeed-dish.timer cfspeed-sats.timer \

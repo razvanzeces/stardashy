@@ -18,6 +18,7 @@ install can be restored by hand (the path is printed in the status file).
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,8 +28,10 @@ BASE = os.environ.get("CFSPEED_HOME") or os.path.dirname(os.path.abspath(__file_
 DATA_DIR = os.path.join(BASE, "data")
 REQUEST = os.path.join(DATA_DIR, "update_request.json")
 STATUS = os.path.join(DATA_DIR, "update_status.json")
-SRC_DIR = os.path.join(DATA_DIR, ".update-src")
-BACKUP_DIR = os.path.join(DATA_DIR, ".update-backup")
+# Deliberately NOT under data/: install.sh makes data/ group-writable for the
+# web server, and everything below is executed with root privileges.
+SRC_DIR = os.path.join(BASE, ".update-src")
+BACKUP_DIR = os.path.join(BASE, ".update-backup")
 VERSION_FILE = os.path.join(BASE, "VERSION")
 
 DEFAULT_REPO = "https://github.com/razvanzeces/stardashy.git"
@@ -40,7 +43,11 @@ INSTALLED_FILES = ["collector.py", "dish_collector.py", "sat_tracker.py",
                    "alerter.py", "apply_config.py", "update.py", "VERSION"]
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def set_status(state, message, **extra):
+    message = _ANSI.sub("", str(message)).strip()
     st = {"state": state, "message": message, "ts": int(time.time())}
     st.update(extra)
     tmp = STATUS + ".tmp"

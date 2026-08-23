@@ -4,6 +4,10 @@
 data/*
 !data/.gitkeep
 
+# Updater working tree and rollback copy (created by update.py)
+.update-src/
+.update-backup/
+
 # Vendored web libs (downloaded by install.sh)
 www/assets/*
 !www/assets/.gitkeep
