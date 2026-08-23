@@ -1,0 +1,10 @@
+[Unit]
+Description=cfspeed — Cloudflare speed test collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/collector.py
+Nice=10
+IOSchedulingClass=idle

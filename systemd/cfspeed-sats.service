@@ -1,0 +1,10 @@
+[Unit]
+Description=cfspeed — Starlink overhead satellite tracker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/sat_tracker.py
+Nice=15
+IOSchedulingClass=idle

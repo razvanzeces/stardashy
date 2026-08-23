@@ -1,0 +1,9 @@
+[Unit]
+Description=cfspeed — apply an update requested from the dashboard
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/update.py
+TimeoutStartSec=1200

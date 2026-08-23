@@ -1,0 +1,10 @@
+[Unit]
+Description=Run cfspeed satellite tracker every minute
+
+[Timer]
+OnCalendar=*:*:00
+RandomizedDelaySec=10
+Persistent=true
+
+[Install]
+WantedBy=timers.target

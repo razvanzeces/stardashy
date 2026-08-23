@@ -1,0 +1,9 @@
+[Unit]
+Description=cfspeed — Telegram alerter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/alerter.py
+Nice=15

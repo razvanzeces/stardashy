@@ -1,0 +1,6 @@
+[Unit]
+Description=cfspeed — apply config to systemd timers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/apply_config.py

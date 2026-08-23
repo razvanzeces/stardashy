@@ -1,0 +1,40 @@
+{
+    "location": {
+        "lat": null,
+        "lon": null,
+        "alt_m": 0,
+        "publish_precision": 2
+    },
+    "dish": {
+        "target": "192.168.100.1:9200",
+        "grpcurl": ""
+    },
+    "intervals": {
+        "speedtest_min": 30,
+        "dish_s": 60,
+        "sats_s": 60,
+        "live_poll_s": 2
+    },
+    "speedtest": {
+        "min_sane_mbps": 5,
+        "max_attempts": 3
+    },
+    "retention": {
+        "days": 0
+    },
+    "telegram": {
+        "token": "",
+        "chat_id": ""
+    },
+    "alerts": {
+        "test_fail": true,
+        "retry": true,
+        "low_speed": false,
+        "low_speed_mbps": 20,
+        "dish_down": true,
+        "dish_hw": true,
+        "high_drop": true,
+        "drop_pct": 5,
+        "new_ip": true
+    }
+}

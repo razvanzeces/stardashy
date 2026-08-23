@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch cfspeed config.json and apply changes
+
+[Path]
+PathChanged=/opt/cfspeed/data/config.json
+Unit=cfspeed-apply.service
+
+[Install]
+WantedBy=multi-user.target

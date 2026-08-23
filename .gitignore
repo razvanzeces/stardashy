@@ -1,0 +1,16 @@
+# Runtime data — never commit: contains the SQLite history, your Telegram
+# token (config.json), your admin password hash (auth.json) and your
+# coordinates. Only the example config ships with the repo.
+data/*
+!data/.gitkeep
+
+# Vendored web libs (downloaded by install.sh)
+www/assets/*
+!www/assets/.gitkeep
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+.backup/
