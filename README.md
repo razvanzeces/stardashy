@@ -53,7 +53,7 @@ Everything is file-based: one SQLite DB, one JSON config, no daemons of its own 
 - Linux with systemd (built for Raspberry Pi OS, runs anywhere)
 - `python3` (stdlib only) + `sgp4` (only for the satellite tracker)
 - [`grpcurl`](https://github.com/fullstorydev/grpcurl/releases) — talks to the dish at `192.168.100.1:9200` (your device must **not** be in bypass-only routing that blocks the dish IP)
-- A web server with PHP ≥ 8 and `php-sqlite3` (nginx + php-fpm, Apache, or just `php -S` to try it)
+- A web server with PHP ≥ 8 and `php-sqlite3` (nginx + php-fpm, Apache, or just `php -S` to try it). No other extensions are required — `mbstring` and `curl` are deliberately not used, since they are not installed by default on Raspberry Pi OS.
 
 ## Install
 

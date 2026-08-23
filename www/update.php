@@ -24,7 +24,26 @@ const CACHE_TTL  = 21600;   // 6 h between GitHub API calls
 $in = json_decode((string) file_get_contents('php://input'), true) ?: [];
 $action = $in['action'] ?? ($_GET['action'] ?? 'check');
 
-function out($d){ echo json_encode($d); exit; }
+function out($d){
+    $j = json_encode($d, JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($j === false) $j = json_encode(['error' => 'encode failed: ' . json_last_error_msg()]);
+    echo $j;
+    exit;
+}
+
+/**
+ * Truncate UTF-8 text without requiring the mbstring extension, which is not
+ * installed by default on Debian/Raspberry Pi OS. Cutting mid-character would
+ * produce invalid UTF-8 and make json_encode fail, so trim back to a valid
+ * sequence.
+ */
+function clip(string $s, int $max): string {
+    if (function_exists('mb_substr')) return mb_substr($s, 0, $max);
+    if (strlen($s) <= $max) return $s;
+    $s = substr($s, 0, $max);
+    while ($s !== '' && preg_match('//u', $s) !== 1) $s = substr($s, 0, -1);
+    return $s;
+}
 function fail($m, $code = 400){ http_response_code($code); out(['error' => $m]); }
 function require_auth(){
     if (empty($_SESSION['cfspeed_auth'])) fail('unauthorized', 401);
@@ -66,7 +85,7 @@ function fetch_latest(): ?array {
             'version'      => norm($rel['tag_name']),
             'tag'          => $rel['tag_name'],
             'name'         => $rel['name'] ?? $rel['tag_name'],
-            'notes'        => mb_substr((string) ($rel['body'] ?? ''), 0, 4000),
+            'notes'        => clip((string) ($rel['body'] ?? ''), 4000),
             'url'          => $rel['html_url'] ?? '',
             'published_at' => $rel['published_at'] ?? null,
         ];
