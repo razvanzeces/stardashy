@@ -39,7 +39,7 @@ if [ "$SRC" = "$DEST" ]; then
 else
   say "installing to ${DEST}"
   mkdir -p "$DEST"
-  for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py; do
+  for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py icmp_collector.py; do
     install -m 0755 "$SRC/$f" "$DEST/$f"
   done
   install -m 0644 "$SRC/VERSION" "$DEST/VERSION"
@@ -93,7 +93,8 @@ if [ "$DEST" != "/opt/cfspeed" ]; then
 fi
 systemctl daemon-reload
 systemctl enable --now cfspeed.timer cfspeed-dish.timer cfspeed-sats.timer \
-                       cfspeed-alerts.timer cfspeed-apply.path cfspeed-update.path
+                       cfspeed-icmp.timer cfspeed-alerts.timer \
+                       cfspeed-apply.path cfspeed-update.path
 
 # apply configured intervals immediately
 python3 "$DEST/apply_config.py" || true

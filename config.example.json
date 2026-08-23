@@ -19,6 +19,23 @@
         "min_sane_mbps": 5,
         "max_attempts": 3
     },
+    "icmp": {
+        "enabled": true,
+        "interval_s": 30,
+        "count": 5,
+        "good_ms": 40,
+        "warn_ms": 100,
+        "targets": [
+            {
+                "label": "Cloudflare",
+                "host": "1.1.1.1"
+            },
+            {
+                "label": "Google",
+                "host": "8.8.8.8"
+            }
+        ]
+    },
     "retention": {
         "days": 0
     },

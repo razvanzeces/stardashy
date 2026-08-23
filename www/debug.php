@@ -42,6 +42,17 @@ function default_config(): array {
             'min_sane_mbps' => 5,
             'max_attempts'  => 3,
         ],
+        'icmp' => [
+            'enabled'    => true,
+            'interval_s' => 30,
+            'count'      => 5,
+            'good_ms'    => 40,
+            'warn_ms'    => 100,
+            'targets'    => [
+                ['label' => 'Cloudflare', 'host' => '1.1.1.1'],
+                ['label' => 'Google',     'host' => '8.8.8.8'],
+            ],
+        ],
         'retention' => [
             'days' => 0,
         ],
@@ -330,6 +341,27 @@ case 'save_config': {
         $c['alerts'][$k] = !empty($al[$k]);
     $c['alerts']['low_speed_mbps'] = max(1, min(500, (float) ($al['low_speed_mbps'] ?? 20)));
     $c['alerts']['drop_pct']       = max(1, min(100, (float) ($al['drop_pct'] ?? 5)));
+
+    if (isset($n['icmp']) && is_array($n['icmp'])) {
+        $ni = $n['icmp'];
+        $c['icmp']['enabled']    = !empty($ni['enabled']);
+        $c['icmp']['interval_s'] = max(10, min(3600, (int) ($ni['interval_s'] ?? 30)));
+        $c['icmp']['count']      = max(1, min(20, (int) ($ni['count'] ?? 5)));
+        $c['icmp']['good_ms']    = max(1, min(2000, (float) ($ni['good_ms'] ?? 40)));
+        $c['icmp']['warn_ms']    = max($c['icmp']['good_ms'] + 1,
+                                       min(5000, (float) ($ni['warn_ms'] ?? 100)));
+        // Hosts end up in a ping argument list, so only IPs and hostnames pass.
+        $targets = [];
+        foreach ((array) ($ni['targets'] ?? []) as $t) {
+            $host = trim((string) ($t['host'] ?? ''));
+            if ($host === '' || strlen($host) > 253) continue;
+            if (!preg_match('/^[A-Za-z0-9]([A-Za-z0-9.\-:]*[A-Za-z0-9])?$/', $host)) continue;
+            $label = trim((string) ($t['label'] ?? '')) ?: $host;
+            $targets[] = ['label' => substr($label, 0, 40), 'host' => $host];
+            if (count($targets) >= 8) break;
+        }
+        if ($targets) $c['icmp']['targets'] = $targets;
+    }
 
     $tmp = CONFIG . '.tmp';
     if (@file_put_contents($tmp, json_encode($c, JSON_PRETTY_PRINT)) === false)

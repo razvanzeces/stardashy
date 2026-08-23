@@ -41,6 +41,7 @@ def main():
     sp_min = clamp(iv.get("speedtest_min"), 2, 120, 30)
     dish_s = clamp(iv.get("dish_s"), 15, 3600, 60)
     sats_s = clamp(iv.get("sats_s"), 30, 3600, 60)
+    icmp_s = clamp((cfg.get("icmp") or {}).get("interval_s"), 10, 3600, 30)
 
     write_override("cfspeed.timer",
         f"[Timer]\nOnCalendar=\nOnCalendar=*:0/{sp_min}\n")
@@ -48,11 +49,15 @@ def main():
         f"[Timer]\nOnCalendar=\nOnBootSec=20\nOnUnitActiveSec={dish_s}s\n")
     write_override("cfspeed-sats.timer",
         f"[Timer]\nOnCalendar=\nOnBootSec=40\nOnUnitActiveSec={sats_s}s\n")
+    write_override("cfspeed-icmp.timer",
+        f"[Timer]\nOnCalendar=\nOnBootSec=30\nOnUnitActiveSec={icmp_s}s\n")
 
     subprocess.run(["systemctl", "daemon-reload"], check=False)
-    for t in ("cfspeed.timer", "cfspeed-dish.timer", "cfspeed-sats.timer"):
+    for t in ("cfspeed.timer", "cfspeed-dish.timer", "cfspeed-sats.timer",
+              "cfspeed-icmp.timer"):
         subprocess.run(["systemctl", "restart", t], check=False)
-    print(f"apply_config: speedtest {sp_min}min, dish {dish_s}s, sats {sats_s}s")
+    print(f"apply_config: speedtest {sp_min}min, dish {dish_s}s, "
+          f"sats {sats_s}s, icmp {icmp_s}s")
 
 
 if __name__ == "__main__":

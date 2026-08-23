@@ -153,7 +153,7 @@ def prune_old_rows(db, cfg, st, now):
     if days <= 0 or now - st.get("prune_ts", 0) < 86400:
         return
     cutoff = now - days * 86400
-    for tbl in ("results", "dish", "sats"):
+    for tbl in ("results", "dish", "sats", "icmp"):
         try:
             db.execute(f"DELETE FROM {tbl} WHERE ts < ?", (cutoff,))
         except sqlite3.OperationalError:

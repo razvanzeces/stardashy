@@ -22,7 +22,9 @@ Speed tests · dish telemetry · live satellite tracking · Telegram alerts — 
 | Module | What you get |
 |---|---|
 | **Speed tests** | Cloudflare-based download/upload/latency/jitter, loaded latency (bufferbloat grade), ICMP ping & loss — pure Python stdlib, no speedtest CLI needed |
-| **Dish telemetry** | Throughput, PoP latency, drop rate, obstruction %, GPS, alignment, hardware alerts — straight from the dish gRPC API every minute |
+| **ICMP health monitor** — continuously pings a set of anycast resolvers (Cloudflare, Google, Quad9, OpenDNS, AdGuard, Lumen) and shows each one as a live tile with current RTT, a colour-coded history strip, packet loss and reachability. Two Starlink-specific targets are offered too — the dish itself (`192.168.100.1`) and the CGNAT gateway (`100.64.0.1`) — which lets you tell "my link to the PoP is bad" apart from "the internet beyond it is bad". Green/amber/red thresholds, probe interval and targets are all set in Settings.
+
+**Dish telemetry** | Throughput, PoP latency, drop rate, obstruction %, GPS, alignment, hardware alerts — straight from the dish gRPC API every minute |
 | **Satellite tracker** | The dish API doesn't tell you which satellite serves you, so cfspeed **infers it**: it propagates the public CelesTrak TLE set with SGP4 and matches satellites against the dish boresight. Live sky view + world map in the browser |
 | **Telegram alerts** | Test failures, dish offline/recovery, hardware alerts, high drop rate, WAN IP changes — with a delivery queue so alerts survive Telegram outages |
 | **Dashboard** | Single-page PHP + Chart.js UI: dashboard, dish live view (2 s), satellite maps, test log, WAN IP history, network debug tools (ping/MTR/DNS/HTTP), settings |
@@ -127,6 +129,9 @@ Everything lives in `data/config.json` and is editable from the **Settings** tab
 | `location.publish_precision` | 2 | decimals of your position exposed in the public `sky.json` (2 ≈ 1 km) |
 | `dish.target` | `192.168.100.1:9200` | dish gRPC endpoint |
 | `retention.days` | 0 | prune DB rows older than N days (0 = keep forever; ~165 MB/year at default cadence) |
+| `icmp.interval_s` | 30 | seconds between ICMP probe runs |
+| `icmp.good_ms` / `icmp.warn_ms` | 40 / 100 | green up to the first, amber up to the second, red above |
+| `icmp.targets` | Cloudflare + Google | up to 8 hosts; loss always outranks latency when picking a colour |
 | `speedtest.min_sane_mbps` | 5 | below this the test is considered broken and retried |
 | `alerts.*` | — | per-alert toggles and thresholds |
 

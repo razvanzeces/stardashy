@@ -1,0 +1,10 @@
+[Unit]
+Description=cfspeed — ICMP health probe
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/cfspeed/icmp_collector.py
+Nice=15
+IOSchedulingClass=idle

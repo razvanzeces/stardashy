@@ -25,6 +25,8 @@
   --dim:#9aa0a8;
   --red:#ff3b30;
   --ok:#ffffff;
+  --good:#3fb950;
+  --warn:#d6a01d;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 [hidden]{display:none !important}
@@ -171,6 +173,22 @@ select option{background:#0a0a0a}
 .tgl input:checked + .bx{border-color:var(--text)}
 .tgl input:checked + .bx::after{content:'';width:7px;height:7px;background:var(--text)}
 .tgl .tl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2)}
+.provgrid{display:flex;flex-wrap:wrap;gap:8px}
+.provgrid button{
+  appearance:none;background:transparent;border:1px solid var(--line);color:var(--text3);
+  font:inherit;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  padding:7px 13px;border-radius:2px;cursor:pointer;transition:all .15s ease;
+}
+.provgrid button:hover{border-color:var(--text2);color:var(--text2)}
+.provgrid button.on{border-color:var(--text);color:var(--text);background:rgba(255,255,255,.06)}
+.tgtlist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.tgtrow{display:flex;align-items:center;gap:9px;font-size:11px;
+  letter-spacing:.06em;color:var(--text2);font-variant-numeric:tabular-nums}
+.tgtrow .nm{min-width:112px;text-transform:uppercase;font-size:10px;letter-spacing:.14em}
+.tgtrow .ip{color:var(--text3)}
+.tgtrow .rm{margin-left:auto;appearance:none;background:transparent;border:0;
+  color:var(--text3);font:inherit;font-size:15px;cursor:pointer;padding:0 6px;line-height:1}
+.tgtrow .rm:hover{color:var(--red)}
 .chatpick{display:flex;flex-direction:column;gap:6px;padding-top:6px}
 .chatpick button{
   appearance:none;background:transparent;border:1px solid var(--line);color:var(--text2);
@@ -202,6 +220,43 @@ select option{background:#0a0a0a}
   animation:spBar 1.1s ease-in-out infinite}
 @keyframes spIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes spBar{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+
+/* ---- ICMP health ---- */
+.hz{display:grid;grid-template-columns:repeat(var(--hz-cols,3),minmax(0,1fr));gap:0}
+.hz-t{
+  padding:16px 20px 15px;border-bottom:1px solid var(--line-soft);
+  position:relative;overflow:hidden;
+}
+.hz-t{border-left:1px solid var(--line-soft)}
+.hz-t.rowstart{border-left:0}
+.hz-hd{display:flex;align-items:center;gap:8px;min-width:0}
+.hz-dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--text3)}
+.hz-dot.good{background:var(--good);box-shadow:0 0 7px var(--good);animation:hzP 2.4s ease-in-out infinite}
+.hz-dot.warn{background:var(--warn);box-shadow:0 0 7px var(--warn);animation:hzP 1.4s ease-in-out infinite}
+.hz-dot.bad {background:var(--red); box-shadow:0 0 7px var(--red); animation:hzP .8s ease-in-out infinite}
+.hz-dot.down{background:var(--red);animation:hzB .7s steps(1) infinite}
+.hz-dot.stale{background:var(--text3)}
+@keyframes hzP{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes hzB{0%,49%{opacity:1}50%,100%{opacity:.12}}
+.hz-nm{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hz-ip{font-size:9px;letter-spacing:.1em;color:var(--text3);margin-left:auto;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.hz-v{display:flex;align-items:baseline;gap:6px;margin-top:9px}
+.hz-ms{font-size:29px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;
+  color:var(--text);transition:color .3s ease}
+.hz-ms.good{color:var(--good)}
+.hz-ms.warn{color:var(--warn)}
+.hz-ms.bad,.hz-ms.down{color:var(--red)}
+.hz-ms.stale{color:var(--text3)}
+.hz-u{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)}
+.hz-strip{width:100%;height:34px;display:block;margin-top:11px}
+.hz-ft{display:flex;gap:12px;margin-top:8px;font-size:9px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text3);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.hz-ft b{color:var(--text2);font-weight:600}
+.hz-ft .lossy b{color:var(--red)}
+.hz-empty{padding:26px 20px;color:var(--text3);font-size:11px;
+  letter-spacing:.16em;text-transform:uppercase}
 
 /* ---- update banner ---- */
 #updBar{
@@ -517,6 +572,14 @@ tr:hover td{background:rgba(255,255,255,.03)}
   </div>
 
   <div class="meta-line" id="metaLine"></div>
+
+  <div id="hzCard" hidden>
+    <div class="sect">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
+      ICMP Health<small id="hzNote"></small>
+    </div>
+    <div class="hz" id="hzGrid"></div>
+  </div>
 
   <div class="seg" data-seg role="tablist" aria-label="Time range">
     <button data-range="3h">3H</button>
@@ -859,6 +922,46 @@ tr:hover td{background:rgba(255,255,255,.03)}
            style="text-decoration:none;display:inline-block">Repository</a>
       </div>
       <div class="updlog" id="updLog"></div>
+    </div>
+
+    <div class="sect">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
+      ICMP Health Monitor<small>shown on the dashboard</small>
+    </div>
+    <div class="set-grid">
+      <div class="k">Enabled<small>ping probes from this host</small></div>
+      <div class="set-row">
+        <label class="tgl"><input type="checkbox" id="hzEn"><span class="bx"></span>
+          <span class="tl">Monitor reachability</span></label>
+      </div>
+
+      <div class="k">Providers<small>click to add or remove</small></div>
+      <div>
+        <div class="provgrid" id="hzProv"></div>
+        <div class="tgtlist" id="hzTargets"></div>
+        <div class="set-row" style="margin-top:10px">
+          <input type="text" id="hzCustomName" placeholder="Label" style="width:130px">
+          <input type="text" id="hzCustomHost" placeholder="IP or hostname" style="width:180px">
+          <button class="btn sec" id="hzAdd">Add</button>
+        </div>
+        <div class="toolstatus" id="hzStatus" style="padding-top:8px"></div>
+      </div>
+
+      <div class="k">Thresholds<small>green up to, amber up to</small></div>
+      <div class="set-row">
+        <input type="number" id="hzGood" style="width:90px" min="1" max="2000">
+        <span class="tl" style="color:var(--text3)">ms green</span>
+        <input type="number" id="hzWarn" style="width:90px" min="2" max="5000">
+        <span class="tl" style="color:var(--text3)">ms amber</span>
+      </div>
+
+      <div class="k">Probe<small>interval and packets per run</small></div>
+      <div class="set-row">
+        <input type="number" id="hzInt" style="width:90px" min="10" max="3600">
+        <span class="tl" style="color:var(--text3)">s</span>
+        <input type="number" id="hzCnt" style="width:90px" min="1" max="20">
+        <span class="tl" style="color:var(--text3)">packets</span>
+      </div>
     </div>
 
     <div class="sect">
@@ -1792,6 +1895,7 @@ function setLive(on){
 document.addEventListener('visibilitychange', () => {
   setLive(!document.hidden && activeView === 'dish');
   setGeo(!document.hidden && activeView === 'sats');
+  hzSetLive(!document.hidden && activeView === 'dash');
 });
 
 /* ================= debug & settings ================= */
@@ -1986,6 +2090,77 @@ function renderHttp(d){
   }).join('');
 }
 
+/* ---- ICMP targets in settings ---- */
+/* Well-known anycast resolvers, plus the two hops that are specific to a
+   Starlink install: the dish itself and the CGNAT gateway behind it. Pinging
+   those two separates "my link to the PoP" from "the internet beyond it". */
+const HZ_PRESETS = [
+  {label:'Cloudflare',  host:'1.1.1.1'},
+  {label:'Cloudflare 2',host:'1.0.0.1'},
+  {label:'Google',      host:'8.8.8.8'},
+  {label:'Google 2',    host:'8.8.4.4'},
+  {label:'Quad9',       host:'9.9.9.9'},
+  {label:'Quad9 2',     host:'149.112.112.112'},
+  {label:'OpenDNS',     host:'208.67.222.222'},
+  {label:'AdGuard',     host:'94.140.14.14'},
+  {label:'Lumen',       host:'4.2.2.1'},
+  {label:'Starlink Dish',host:'192.168.100.1'},
+  {label:'Starlink GW', host:'100.64.0.1'},
+];
+const HZ_MAX = 8;
+let hzTargets = [];
+
+function hzSyncTargets(){
+  const prov = $('hzProv');
+  if (prov && !prov.dataset.built){
+    prov.dataset.built = '1';
+    prov.innerHTML = HZ_PRESETS.map((p, i) =>
+      `<button type="button" data-p="${i}">${p.label}</button>`).join('');
+    prov.querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => {
+        const p = HZ_PRESETS[+b.dataset.p];
+        const at = hzTargets.findIndex(t => t.host === p.host);
+        if (at >= 0) hzTargets.splice(at, 1);
+        else if (hzTargets.length >= HZ_MAX)
+          return void ($('hzStatus').textContent = `Maximum ${HZ_MAX} targets`);
+        else hzTargets.push({label:p.label, host:p.host});
+        $('hzStatus').textContent = '';
+        hzSyncTargets();
+      }));
+  }
+  prov?.querySelectorAll('button').forEach(b => b.classList.toggle('on',
+    hzTargets.some(t => t.host === HZ_PRESETS[+b.dataset.p].host)));
+
+  const list = $('hzTargets');
+  if (!list) return;
+  list.innerHTML = hzTargets.length
+    ? hzTargets.map((t, i) => `
+        <div class="tgtrow">
+          <span class="nm">${t.label}</span><span class="ip">${t.host}</span>
+          <button class="rm" data-i="${i}" title="Remove">&times;</button>
+        </div>`).join('')
+    : '<div class="tgtrow"><span class="ip">No targets — the card stays hidden</span></div>';
+  list.querySelectorAll('.rm').forEach(b =>
+    b.addEventListener('click', () => {
+      hzTargets.splice(+b.dataset.i, 1); hzSyncTargets();
+    }));
+}
+
+$('hzAdd')?.addEventListener('click', () => {
+  const host = $('hzCustomHost').value.trim();
+  const label = $('hzCustomName').value.trim() || host;
+  const st = $('hzStatus');
+  if (!/^[A-Za-z0-9]([A-Za-z0-9.\-:]*[A-Za-z0-9])?$/.test(host))
+    return void (st.textContent = 'Enter a valid IP or hostname');
+  if (hzTargets.some(t => t.host === host))
+    return void (st.textContent = 'Already in the list');
+  if (hzTargets.length >= HZ_MAX)
+    return void (st.textContent = `Maximum ${HZ_MAX} targets`);
+  hzTargets.push({label: label.slice(0, 40), host});
+  $('hzCustomHost').value = ''; $('hzCustomName').value = '';
+  st.textContent = ''; hzSyncTargets();
+});
+
 /* ---- settings ---- */
 async function loadSettings(){
   try{
@@ -2005,6 +2180,16 @@ async function loadSettings(){
     $('ivDish').value = c.intervals.dish_s;
     $('ivSats').value = c.intervals.sats_s;
     $('ivLive').value = c.intervals.live_poll_s;
+    const ic = c.icmp || {};
+    $('hzEn').checked = ic.enabled !== false;
+    $('hzGood').value = ic.good_ms ?? 40;
+    $('hzWarn').value = ic.warn_ms ?? 100;
+    $('hzInt').value  = ic.interval_s ?? 30;
+    $('hzCnt').value  = ic.count ?? 5;
+    hzTargets = Array.isArray(ic.targets)
+      ? ic.targets.filter(t => t && t.host).map(t => ({label:t.label || t.host, host:t.host}))
+      : [];
+    hzSyncTargets();
     $('ivSane').value = c.speedtest.min_sane_mbps;
     $('ivAtt').value = c.speedtest.max_attempts;
     $('locLat').value = c.location?.lat ?? '';
@@ -2033,6 +2218,14 @@ $('setSave').addEventListener('click', async () => {
         sats_s:parseInt($('ivSats').value, 10),
         live_poll_s:parseInt($('ivLive').value, 10),
       },
+      icmp:{
+        enabled:$('hzEn').checked,
+        good_ms:parseFloat($('hzGood').value),
+        warn_ms:parseFloat($('hzWarn').value),
+        interval_s:parseInt($('hzInt').value, 10),
+        count:parseInt($('hzCnt').value, 10),
+        targets:hzTargets,
+      },
       speedtest:{
         min_sane_mbps:parseFloat($('ivSane').value),
         max_attempts:parseInt($('ivAtt').value, 10),
@@ -2046,6 +2239,7 @@ $('setSave').addEventListener('click', async () => {
     }});
     st.textContent = r.note || 'Saved';
     LIVE_MS = Math.max(1000, parseInt($('ivLive').value, 10) * 1000);
+    hzPoll();
     if (liveTimer){ setLive(false); setLive(activeView === 'dish'); }
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
@@ -2099,6 +2293,172 @@ $('pwChange').addEventListener('click', async () => {
     $('pwNew').value = '';
     st.textContent = 'Password changed';
   }catch(e){ st.textContent = 'Error: ' + e.message; }
+});
+
+/* ================= ICMP health ================= */
+const HZ = {data:null, timer:null, cvs:new Map()};
+
+const HZ_COL = {
+  good:'#3fb950', warn:'#d6a01d', bad:'#ff3b30',
+  down:'#ff3b30', stale:'#565b63',
+};
+
+/* Which band a single sample falls into — same rules as health.php, so the
+   strip and the big number can never disagree. */
+function hzBand(rtt, loss, good, warn){
+  if (rtt == null || loss >= 100) return 'down';
+  if (loss > 0) return 'warn';
+  if (rtt <= good) return 'good';
+  if (rtt <= warn) return 'warn';
+  return 'bad';
+}
+
+function hzDrawStrip(cv, t, good, warn){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth || 200, h = cv.clientHeight || 34;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)){
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+
+  const s = t.samples || [];
+  /* baseline so an empty strip still reads as a chart, not a blank box */
+  x.strokeStyle = 'rgba(255,255,255,.07)';
+  x.beginPath(); x.moveTo(0, h - .5); x.lineTo(w, h - .5); x.stroke();
+  if (!s.length) return;
+
+  const N = 60;                       // fixed slot count: bars stay put as
+  const slot = w / N;                 // samples arrive, instead of resizing
+  const bw = Math.max(1.5, slot - 1.5);
+  const usable = h - 3;
+
+  /* Scale to the 90th percentile rather than the maximum. A single 250 ms
+     spike would otherwise flatten a steady 17 ms line into an unreadable
+     sliver; bars above the scale are clamped and capped instead, which keeps
+     everyday variation legible while still making spikes obvious. */
+  const rtts = s.filter(v => v.rtt != null).map(v => v.rtt).sort((a, b) => a - b);
+  const p90 = rtts.length ? rtts[Math.floor(0.9 * (rtts.length - 1))] : good;
+  const top = Math.max(p90 * 1.4, 1);
+
+  s.slice(-N).forEach((v, i) => {
+    const idx = N - Math.min(s.length, N) + i;
+    const px = idx * slot + (slot - bw) / 2;
+    const band = hzBand(v.rtt, v.loss ?? 0, good, warn);
+    if (band === 'down'){
+      x.fillStyle = 'rgba(255,59,48,.28)';
+      x.fillRect(px, 2, bw, usable);          // full-height ghost = no reply
+      x.fillStyle = HZ_COL.down;
+      x.fillRect(px, h - 3, bw, 3);
+      return;
+    }
+    const over = v.rtt > top;
+    const bh = Math.max(2, Math.min(usable, (v.rtt / top) * usable));
+    x.fillStyle = HZ_COL[band];
+    x.globalAlpha = band === 'good' ? .85 : .95;
+    x.fillRect(px, h - bh, bw, bh);
+    x.globalAlpha = 1;
+    if (over){                                 // cap marks a clipped spike
+      x.fillStyle = HZ_COL.bad;
+      x.fillRect(px, 0, bw, 2);
+    }
+  });
+}
+
+/* Choose a column count that fits the container and leaves no stranded tile
+   on the last row — a lone tile next to dead space looks broken. */
+function hzCols(n, width){
+  const fit = Math.max(1, Math.min(4, Math.floor(width / 200)));
+  if (n <= fit) return n;                  // everything on one row
+  let best = fit, bestGap = Infinity;
+  for (let c = fit; c >= 2; c--){
+    const gap = (c - (n % c)) % c;         // empty slots on the last row
+    if (gap < bestGap){ bestGap = gap; best = c; }   // ties keep more columns
+    if (gap === 0) break;
+  }
+  return best;
+}
+
+function hzRender(d){
+  HZ.data = d;
+  const card = $('hzCard');
+  if (!d || d.enabled === false || !(d.targets || []).length){
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  $('hzNote').textContent = d.waiting
+    ? 'waiting for first probe'
+    : `every ${d.interval_s}s · ${d.good_ms}/${d.warn_ms} ms thresholds`;
+
+  const grid = $('hzGrid');
+  const cols = hzCols(d.targets.length, grid.clientWidth || 1012);
+  grid.style.setProperty('--hz-cols', cols);
+  const sig = d.targets.map(t => t.host).join('|');
+  if (grid.dataset.sig !== sig){            // rebuild only when targets change
+    grid.dataset.sig = sig;
+    HZ.cvs.clear();
+    grid.innerHTML = d.targets.map((t, i) => `
+      <div class="hz-t" data-i="${i}">
+        <div class="hz-hd">
+          <span class="hz-dot" data-r="dot"></span>
+          <span class="hz-nm" data-r="nm"></span>
+          <span class="hz-ip" data-r="ip"></span>
+        </div>
+        <div class="hz-v">
+          <span class="hz-ms" data-r="ms">–</span>
+          <span class="hz-u">ms</span>
+        </div>
+        <canvas class="hz-strip" data-r="cv"></canvas>
+        <div class="hz-ft" data-r="ft"></div>
+      </div>`).join('');
+  }
+
+  d.targets.forEach((t, i) => {
+    const el = grid.querySelector(`.hz-t[data-i="${i}"]`);
+    if (!el) return;
+    el.classList.toggle('rowstart', i % cols === 0);
+    const q = r => el.querySelector(`[data-r="${r}"]`);
+    q('dot').className = 'hz-dot ' + t.state;
+    q('nm').textContent = t.label;
+    q('ip').textContent = t.host;
+    const ms = q('ms');
+    ms.className = 'hz-ms ' + t.state;
+    ms.textContent = t.state === 'down' ? '—'
+      : (t.rtt != null ? t.rtt.toFixed(1) : '–');
+    const lossy = (t.loss ?? 0) > 0;
+    q('ft').innerHTML = [
+      t.min != null ? `<span>min <b>${t.min}</b></span>` : '',
+      t.avg != null ? `<span>avg <b>${t.avg}</b></span>` : '',
+      `<span class="${lossy ? 'lossy' : ''}">loss <b>${t.loss ?? 0}%</b></span>`,
+      t.uptime != null ? `<span>up <b>${t.uptime}%</b></span>` : '',
+    ].join('');
+    hzDrawStrip(q('cv'), t, d.good_ms, d.warn_ms);
+  });
+}
+
+async function hzPoll(){
+  try{
+    const res = await fetch('health.php', {cache:'no-store'});
+    hzRender(await res.json());
+  }catch(e){ /* dashboard keeps working without it */ }
+}
+
+function hzSetLive(on){
+  if (on && !HZ.timer){
+    hzPoll();
+    HZ.timer = setInterval(hzPoll, 5000);
+  } else if (!on && HZ.timer){
+    clearInterval(HZ.timer); HZ.timer = null;
+  }
+}
+
+/* redraw on resize so the strips stay sharp */
+let hzRz;
+window.addEventListener('resize', () => {
+  clearTimeout(hzRz);
+  hzRz = setTimeout(() => { if (HZ.data) hzRender(HZ.data); }, 150);
 });
 
 /* ================= software update ================= */
@@ -2276,6 +2636,7 @@ document.querySelectorAll('.nav button').forEach(b => {
     $('view-' + activeView).classList.add('active');
     setLive(activeView === 'dish');
     setGeo(activeView === 'sats');
+    hzSetLive(activeView === 'dash');
     if (activeView === 'debug' || activeView === 'settings') checkAuth();
   });
 });
@@ -2292,6 +2653,8 @@ document.querySelectorAll('.seg button').forEach(b => {
 
 load();
 setInterval(() => { if (!document.hidden) load(); }, 60_000);
+
+hzSetLive(true);
 
 updCheck(false);
 setInterval(() => { if (!document.hidden) updCheck(false); }, 3600_000);

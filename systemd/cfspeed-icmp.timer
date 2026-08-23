@@ -1,0 +1,10 @@
+[Unit]
+Description=Run cfspeed ICMP health probe
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
