@@ -274,6 +274,15 @@ $cfgFile = CFSPEED_DATA . '/config.json';
 if (is_file($cfgFile)) {
     $c = json_decode((string) file_get_contents($cfgFile), true) ?: [];
     $cfgSafe = ['live_poll_s' => max(1, min(30, (int) ($c['intervals']['live_poll_s'] ?? 2)))];
+    // Coarse observer position, only so the UI can show the distance to the
+    // Cloudflare edge. Rounded by the same publish_precision the sky map uses,
+    // so the dashboard never exposes a more exact location than that does.
+    $loc = $c['location'] ?? [];
+    if (isset($loc['lat'], $loc['lon']) && $loc['lat'] !== null && $loc['lon'] !== null) {
+        $prec = max(0, min(5, (int) ($loc['publish_precision'] ?? 2)));
+        $cfgSafe['qth'] = ['lat' => round((float) $loc['lat'], $prec),
+                           'lon' => round((float) $loc['lon'], $prec)];
+    }
 }
 
 echo json_encode([

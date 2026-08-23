@@ -6,6 +6,7 @@
 <title>Stardashy — Starlink Monitoring</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='black'/><circle cx='50' cy='50' r='12' fill='white'/></svg>">
 <!-- vendored libs (www/assets/, fetched by install.sh) with CDN fallback -->
+<script src="colos.js"></script>
 <script src="assets/chart.umd.min.js"></script>
 <script>if(!window.Chart)document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"><\/script>')</script>
 <script src="assets/satellite.min.js"></script>
@@ -220,6 +221,19 @@ select option{background:#0a0a0a}
   animation:spBar 1.1s ease-in-out infinite}
 @keyframes spIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes spBar{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+
+/* ---- PoP badge ---- */
+.hitem.pop{gap:9px}
+.hitem.pop .flag{font-size:15px;line-height:1;letter-spacing:0;filter:saturate(.92)}
+.hitem.pop .popsub{color:var(--text3);letter-spacing:.1em;font-size:10px}
+.hitem.pop .popsub b{color:var(--text2)}
+
+/* ---- hero deltas ---- */
+.dlt{font-size:11px;letter-spacing:.1em;margin-left:9px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;vertical-align:2px}
+.dlt.up{color:var(--good)}
+.dlt.dn{color:var(--red)}
+.dlt.flat{color:var(--text3)}
 
 /* ---- ICMP health ---- */
 .hz{display:grid;grid-template-columns:repeat(var(--hz-cols,3),minmax(0,1fr));gap:0}
@@ -509,7 +523,9 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <span class="brand-sub">Monitoring</span>
     </div>
     <div class="hstatus">
-      <span class="hitem"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a17 17 0 0 1 0 18M12 3a17 17 0 0 0 0 18"/></svg><b id="colo">—</b></span>
+      <span class="hitem pop" id="popItem" title="Cloudflare edge serving this connection">
+        <span class="flag" id="popFlag"></span><b id="popName">—</b><span class="popsub" id="popSub"></span>
+      </span>
       <span class="hitem"><span class="sdot" id="dot"></span><span id="lastRun">Connecting</span></span>
     </div>
   </div>
@@ -1103,6 +1119,43 @@ function fmtUptime(s){
   return (d ? d + 'd ' : '') + h + 'h ' + m + 'm';
 }
 
+/* ISO country code -> emoji flag, via regional indicator symbols. */
+function flagOf(cc){
+  if (!/^[A-Za-z]{2}$/.test(cc || '')) return '';
+  return String.fromCodePoint(...cc.toUpperCase().split('')
+    .map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+function kmBetween(la1, lo1, la2, lo2){
+  const R = 6371, r = Math.PI / 180;
+  const a = Math.sin((la2 - la1) * r / 2) ** 2 +
+    Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* "3 min ago" beats a bare clock time when you are checking whether the
+   collector is still alive. Recomputed on a ticker, not only on data load. */
+function agoText(ts){
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60)    return 'just now';
+  if (s < 3600)  return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  return Math.floor(s / 86400) + ' d ago';
+}
+
+/* Change versus the previous successful test. Higher is better for
+   throughput, worse for latency, so callers pass which way is good. */
+function deltaHtml(cur, prev, higherIsBetter, unit){
+  if (cur == null || prev == null || !isFinite(cur) || !isFinite(prev)) return '';
+  const d = cur - prev;
+  const pct = prev !== 0 ? Math.abs(d / prev) * 100 : 0;
+  if (Math.abs(d) < 0.05 || pct < 1.5) return '<span class="dlt flat">=</span>';
+  const good = higherIsBetter ? d > 0 : d < 0;
+  const arrow = d > 0 ? '\u25b2' : '\u25bc';
+  const val = Math.abs(d) >= 10 ? Math.round(Math.abs(d)) : Math.abs(d).toFixed(1);
+  return `<span class="dlt ${good ? 'up' : 'dn'}">${arrow} ${val}${unit}</span>`;
+}
+
 function bbGrade(ms){
   if (ms == null) return null;
   if (ms < 5)   return ['A+', false];
@@ -1167,12 +1220,16 @@ function render(data){
     $('downNow').textContent = Math.round(latest.down_mbps);
     $('upNow').textContent = Math.round(latest.up_mbps);
     $('latNow').textContent = latest.latency_ms ?? '–';
-    $('downSub').innerHTML = stats ? `Avg <b>${stats.down_avg}</b> · Peak <b>${stats.down_max}</b>` : '';
-    $('upSub').innerHTML = stats ? `Avg <b>${stats.up_avg}</b> · Peak <b>${stats.up_max}</b>` : '';
+    const prev = rows.length > 1 ? rows[rows.length - 2] : null;
+    $('downSub').innerHTML = (stats ? `Avg <b>${stats.down_avg}</b> · Peak <b>${stats.down_max}</b>` : '')
+      + deltaHtml(latest.down_mbps, prev?.down_mbps, true, '');
+    $('upSub').innerHTML = (stats ? `Avg <b>${stats.up_avg}</b> · Peak <b>${stats.up_max}</b>` : '')
+      + deltaHtml(latest.up_mbps, prev?.up_mbps, true, '');
     const parts = [];
     if (latest.jitter_ms != null) parts.push(`Jitter <b>${latest.jitter_ms}</b>`);
     if (latest.lat_down_ms != null) parts.push(`Loaded <b>${latest.lat_down_ms}/${latest.lat_up_ms ?? '–'}</b>`);
-    $('latSub').innerHTML = parts.join(' · ') || '&nbsp;';
+    $('latSub').innerHTML = (parts.join(' · ') || '&nbsp;')
+      + deltaHtml(latest.latency_ms, prev?.latency_ms, false, ' ms');
 
     const g = bbGrade(stats?.bufferbloat_ms);
     if (g){
@@ -1184,9 +1241,9 @@ function render(data){
       $('gradeWrap').hidden = true;
     }
 
-    $('colo').textContent = [latest.colo, latest.country].filter(Boolean).join(' · ') || '—';
-    $('lastRun').textContent = 'Last test ' + new Date(latest.ts * 1000)
-      .toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    renderPop(latest, data.cfg);
+    LAST_TS = latest.ts;
+    tickAgo();
     $('dot').classList.remove('err');
 
     const ic = {
@@ -1201,8 +1258,12 @@ function render(data){
     if (latest.ping_loss != null) m.push(`${ic.loss}Loss <b>${latest.ping_loss}%</b>`);
     if (stats?.success_pct != null) m.push(`${ic.up}Uptime <b>${stats.success_pct}%</b>`);
     $('metaLine').innerHTML = m.map(s => `<span>${s}</span>`).join('');
+    setStatus(
+      latest.error ? 'bad' : ((latest.ping_loss ?? 0) > 0 ? 'warn' : 'ok'),
+      `${Math.round(latest.down_mbps)}\u2193 ${Math.round(latest.up_mbps)}\u2191 \u00b7 Stardashy`);
   } else {
     $('lastRun').textContent = 'No data';
+    setStatus('warn', 'Stardashy');
   }
 
   if (usage && usage.last5?.length){
@@ -2295,6 +2356,63 @@ $('pwChange').addEventListener('click', async () => {
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
 
+/* ================= tab title and favicon ================= */
+/* A monitoring dashboard is usually left open in a background tab, so the
+   headline number and a status colour belong where you can see them without
+   switching to it. */
+const FAVICON = st => 'data:image/svg+xml,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">`
+  + `<rect width="100" height="100" fill="black"/>`
+  + `<circle cx="50" cy="50" r="12" fill="${st}"/></svg>`);
+
+let favEl = null;
+function setStatus(state, title){
+  favEl = favEl || document.querySelector('link[rel="icon"]');
+  const col = {ok:'#ffffff', warn:'#d6a01d', bad:'#ff3b30'}[state] || '#ffffff';
+  if (favEl && favEl.dataset.st !== state){
+    favEl.dataset.st = state;
+    favEl.href = FAVICON(col);
+  }
+  document.title = title;
+}
+
+/* ================= PoP badge ================= */
+/* latest.colo is the Cloudflare edge (an IATA code); latest.country is the
+   *client's* country from cdn-cgi/trace. Those are usually different — SOF is
+   Sofia in Bulgaria while you sit in Romania — so they are shown separately
+   instead of being joined into one misleading string. */
+function renderPop(latest, cfg){
+  const code = (latest.colo || '').toUpperCase();
+  const c = (typeof COLOS !== 'undefined' && COLOS[code]) || null;
+  $('popFlag').textContent = c ? flagOf(c[1]) : '\uD83C\uDF10';
+  $('popName').textContent = c ? c[0] : (code || '—');
+
+  const bits = [];
+  /* Only repeat the code when the name is a real city — for an unknown colo
+     the name already is the code. */
+  if (code && c) bits.push(code);
+  const q = cfg && cfg.qth;
+  if (c && q){
+    /* Group with thin spaces, not toLocaleString: a European locale renders
+       15371 as "15.371", which reads as fifteen-point-three. */
+    const km = Math.round(kmBetween(q.lat, q.lon, c[2], c[3]));
+    bits.push(`<b>${String(km).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009')}</b> km`);
+  }
+  $('popSub').innerHTML = bits.join(' \u00b7 ');
+  $('popItem').title = c
+    ? `Cloudflare edge: ${c[0]}, ${c[1]} (${code})`
+      + (latest.country ? ` \u2014 you appear to be in ${latest.country}` : '')
+    : `Cloudflare edge ${code || 'unknown'}`;
+}
+
+/* ================= relative clock ================= */
+let LAST_TS = null;
+function tickAgo(){
+  if (!LAST_TS){ return; }
+  $('lastRun').textContent = 'Last test ' + agoText(LAST_TS);
+}
+setInterval(tickAgo, 30_000);
+
 /* ================= ICMP health ================= */
 const HZ = {data:null, timer:null, cvs:new Map()};
 
@@ -2621,6 +2739,7 @@ async function load(){
   }catch(e){
     $('lastRun').textContent = 'Offline';
     $('dot').classList.add('err');
+    setStatus('bad', 'Offline \u00b7 Stardashy');
   }
   loadSky();
   hideSplash();
@@ -2639,6 +2758,17 @@ document.querySelectorAll('.nav button').forEach(b => {
     hzSetLive(activeView === 'dash');
     if (activeView === 'debug' || activeView === 'settings') checkAuth();
   });
+});
+
+/* 1-7 jump between views; ignored while typing in a field */
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target.tagName;
+  if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+  const i = '1234567'.indexOf(e.key);
+  if (i < 0) return;
+  const btn = document.querySelectorAll('.nav button')[i];
+  if (btn){ btn.click(); btn.blur(); }
 });
 
 /* range tabs (all instances stay in sync) */

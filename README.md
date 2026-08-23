@@ -50,6 +50,13 @@ flowchart LR
 
 Everything is file-based: one SQLite DB, one JSON config, no daemons of its own — systemd timers do the scheduling, a `.path` unit applies settings saved from the UI.
 
+### Small things
+
+- The tab title carries the current down/up figures and the favicon turns amber on packet loss or red when the link is down, so a background tab is still a status light.
+- The three headline metrics show the change since the previous test, coloured by whether that direction is good — faster download green, higher latency red.
+- "Last test" counts up in real time rather than showing a fixed clock time, so a stalled collector is obvious.
+- Keys `1`–`7` jump between views (ignored while typing in a field).
+
 ## Requirements
 
 - Linux with systemd (built for Raspberry Pi OS, runs anywhere)
