@@ -56,6 +56,10 @@ function default_config(): array {
         'retention' => [
             'days' => 0,
         ],
+        'usage' => [
+            'cycle_day' => 1,     // day of month the billing cycle restarts
+            'cap_gb'    => 0,     // 0 = no cap, only informational either way
+        ],
         'telegram' => [
             'token'   => '',
             'chat_id' => '',
@@ -361,6 +365,11 @@ case 'save_config': {
             if (count($targets) >= 8) break;
         }
         if ($targets) $c['icmp']['targets'] = $targets;
+    }
+
+    if (isset($n['usage']) && is_array($n['usage'])) {
+        $c['usage']['cycle_day'] = max(1, min(28, (int) ($n['usage']['cycle_day'] ?? 1)));
+        $c['usage']['cap_gb']    = max(0, min(100000, (float) ($n['usage']['cap_gb'] ?? 0)));
     }
 
     $tmp = CONFIG . '.tmp';

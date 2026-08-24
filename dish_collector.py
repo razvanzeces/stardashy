@@ -53,6 +53,24 @@ def ring_tail(arr, current, n):
     return [arr[(cur - n + i) % ln] for i in range(n)]
 
 
+# The ring buffer is finite, so a long gap (reboot, stopped timer) can only be
+# accounted for as far back as the buffer reaches. Anything older is lost
+# rather than guessed at, and sample_s records what was actually covered.
+MAX_SPAN_S = 900
+
+
+def seconds_since_last_row(conn, ts):
+    """How many seconds of history this run should account for."""
+    try:
+        prev = conn.execute(
+            "SELECT MAX(ts) FROM dish WHERE ts < ?", (ts,)).fetchone()[0]
+    except sqlite3.OperationalError:
+        prev = None
+    if not prev:
+        return 60
+    return max(1, min(MAX_SPAN_S, int(ts - prev)))
+
+
 def ensure_db(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS dish (
@@ -75,6 +93,13 @@ def ensure_db(conn):
             error TEXT
         )
     """)
+    # Added after v3.3: integrated traffic for the window this row covers.
+    for col, typ in (("bytes_down", "INTEGER"), ("bytes_up", "INTEGER"),
+                     ("sample_s", "INTEGER")):
+        try:
+            conn.execute(f"ALTER TABLE dish ADD COLUMN {col} {typ}")
+        except sqlite3.OperationalError:
+            pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dish_ts ON dish(ts)")
     conn.commit()
 
@@ -88,7 +113,8 @@ def main():
     row = {k: None for k in (
         "uptime_s", "down_bps", "up_bps", "pop_latency_ms",
         "drop_rate_60s", "outage_s_60s", "fraction_obstructed",
-        "gps_sats", "eth_mbps", "tilt", "azim", "elev", "sw", "alerts")}
+        "gps_sats", "eth_mbps", "tilt", "azim", "elev", "sw", "alerts",
+        "bytes_down", "bytes_up", "sample_s")}
     err = None
 
     try:
@@ -119,6 +145,21 @@ def main():
             if drops:
                 row["drop_rate_60s"] = round(sum(drops) / len(drops), 4)
                 row["outage_s_60s"] = sum(1 for d in drops if d >= 1)
+
+            # The dish keeps a per-second ring buffer of throughput. Summing
+            # the samples covering the time since the previous run turns those
+            # instantaneous rates into an actual byte count, which is the only
+            # way to get real usage: sampling the rate once a minute would miss
+            # everything between samples.
+            span = seconds_since_last_row(db, ts)
+            dn = ring_tail(hi.get("downlinkThroughputBps", []), cur, span)
+            up = ring_tail(hi.get("uplinkThroughputBps", []), cur, span)
+            if dn or up:
+                n = max(len(dn), len(up))
+                row["sample_s"] = n
+                # one sample per second, bits -> bytes
+                row["bytes_down"] = int(sum(max(0.0, float(v or 0)) for v in dn) / 8)
+                row["bytes_up"] = int(sum(max(0.0, float(v or 0)) for v in up) / 8)
         except Exception:
             pass  # history optional
 
@@ -126,12 +167,14 @@ def main():
         """INSERT INTO dish
            (ts, uptime_s, down_bps, up_bps, pop_latency_ms,
             drop_rate_60s, outage_s_60s, fraction_obstructed,
-            gps_sats, eth_mbps, tilt, azim, elev, sw, alerts, error)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            gps_sats, eth_mbps, tilt, azim, elev, sw, alerts, error,
+            bytes_down, bytes_up, sample_s)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (ts, row["uptime_s"], row["down_bps"], row["up_bps"],
          row["pop_latency_ms"], row["drop_rate_60s"], row["outage_s_60s"],
          row["fraction_obstructed"], row["gps_sats"], row["eth_mbps"],
-         row["tilt"], row["azim"], row["elev"], row["sw"], row["alerts"], err),
+         row["tilt"], row["azim"], row["elev"], row["sw"], row["alerts"], err,
+         row["bytes_down"], row["bytes_up"], row["sample_s"]),
     )
     db.commit()
     db.close()
@@ -141,7 +184,9 @@ def main():
         sys.exit(1)
     print(f"cfspeed-dish: {round((row['down_bps'] or 0)/1e6,1)}v / "
           f"{round((row['up_bps'] or 0)/1e6,2)}^ Mbps | pop {row['pop_latency_ms']} ms | "
-          f"drop60 {row['drop_rate_60s']} | obstr {round((row['fraction_obstructed'] or 0)*100,3)}%")
+          f"drop60 {row['drop_rate_60s']} | obstr {round((row['fraction_obstructed'] or 0)*100,3)}%"
+          + (f" | used {round(((row['bytes_down'] or 0)+(row['bytes_up'] or 0))/1e6,1)} MB"
+             f"/{row['sample_s']}s" if row["sample_s"] else ""))
 
 
 if __name__ == "__main__":

@@ -222,6 +222,35 @@ select option{background:#0a0a0a}
 @keyframes spIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes spBar{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
 
+/* ---- data usage ---- */
+.ubar{height:6px;background:rgba(255,255,255,.08);margin-top:14px;position:relative;overflow:hidden}
+.ubar i{position:absolute;left:0;top:0;bottom:0;background:var(--text);transition:width .4s ease}
+.ubar i.warn{background:var(--warn)}
+.ubar i.bad{background:var(--red)}
+.ubar u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--text3)}
+.unote{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);
+  margin-top:9px;display:flex;gap:16px;flex-wrap:wrap}
+.unote b{color:var(--text2)}
+.unote .warn{color:var(--warn)}
+
+/* ---- outage timeline ---- */
+.tlwrap{padding:20px 2px 4px}
+#tlCanvas{width:100%;height:58px;display:block;cursor:crosshair}
+.tlaxis{display:flex;justify-content:space-between;font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text3);margin-top:7px;font-variant-numeric:tabular-nums}
+.tlkey{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+.tlkey span{display:flex;align-items:center;gap:7px}
+.tlkey i{width:11px;height:11px;display:inline-block;border-radius:1px}
+.tlcap{margin-top:12px;min-height:16px;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text3);font-variant-numeric:tabular-nums}
+.tlcap b{color:var(--text)}
+.evkind{font-size:9px;font-weight:700;letter-spacing:.12em;border:1px solid var(--text3);
+  border-radius:2px;padding:2px 8px;color:var(--text2);white-space:nowrap}
+.evkind.link{border-color:var(--red);color:var(--red)}
+.evkind.blind{border-color:var(--text3);color:var(--text3)}
+.evkind.deg{border-color:var(--warn);color:var(--warn)}
+
 /* ---- PoP badge ---- */
 .hitem.pop{gap:9px}
 .hitem.pop .flag{font-size:15px;line-height:1;letter-spacing:0;filter:saturate(.92)}
@@ -690,6 +719,22 @@ tr:hover td{background:rgba(255,255,255,.03)}
 
   <div class="sect"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dish Statistics<small id="dishOutage"></small></div>
   <div class="stats" id="dishStats"></div>
+
+  <div id="usageCard2" hidden>
+    <div class="sect">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M21 8v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9-5 9 5"/><path d="M12 12v5M9.5 14.5L12 17l2.5-2.5"/></svg>
+      Data Usage<small id="usageNote">measured from the dish</small>
+    </div>
+    <div class="stats" id="usageTiles"></div>
+    <div class="tlwrap">
+      <div class="ubar" id="usageBar" hidden><i id="usageFill"></i><u id="usageMark" hidden></u></div>
+      <div class="unote" id="usageSub"></div>
+    </div>
+    <div class="chart-block">
+      <div class="chart-title"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Daily Traffic</div>
+      <div class="chart-wrap short"><canvas id="chartUsage"></canvas></div>
+    </div>
+  </div>
 </section>
 
 <!-- ============ SATS ============ -->
@@ -774,6 +819,32 @@ tr:hover td{background:rgba(255,255,255,.03)}
 <!-- ============ LOG ============ -->
 <section class="view" id="view-log">
   <div class="sect" style="margin-top:0">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+    Outage Timeline<small id="tlNote"></small>
+  </div>
+  <div class="stats" id="tlStats"></div>
+  <div class="tlwrap">
+    <canvas id="tlCanvas" width="2000" height="116"></canvas>
+    <div class="tlaxis"><span id="tlFrom"></span><span id="tlTo"></span></div>
+    <div class="tlkey">
+      <span><i style="background:#2a2a2a"></i>Link up</span>
+      <span><i style="background:var(--red)"></i>Link outage</span>
+      <span><i style="background:var(--warn)"></i>Degraded</span>
+      <span><i style="background:#4a4f57"></i>Dish unreachable — not observed</span>
+    </div>
+    <div class="tlcap" id="tlCap">Hover the timeline for detail</div>
+  </div>
+  <div class="tblwrap" style="margin-top:8px">
+    <table style="min-width:640px">
+      <thead><tr>
+        <th>Started</th><th>Type</th><th class="r">Duration</th>
+        <th class="r">Worst Drop</th><th>Detail</th>
+      </tr></thead>
+      <tbody id="tlBody"></tbody>
+    </table>
+  </div>
+
+  <div class="sect">
     <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a17 17 0 0 1 0 18M12 3a17 17 0 0 0 0 18"/></svg>
     WAN IP History<small>All time</small>
   </div>
@@ -938,6 +1009,23 @@ tr:hover td{background:rgba(255,255,255,.03)}
            style="text-decoration:none;display:inline-block">Repository</a>
       </div>
       <div class="updlog" id="updLog"></div>
+    </div>
+
+    <div class="sect">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M21 8v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="M3 8l9-5 9 5"/></svg>
+      Data Usage<small>measured from the dish, not estimated</small>
+    </div>
+    <div class="set-grid">
+      <div class="k">Billing cycle<small>day of month it restarts</small></div>
+      <div class="set-row">
+        <input type="number" id="usDay" style="width:90px" min="1" max="28">
+        <span class="tl" style="color:var(--text3)">of each month</span>
+      </div>
+      <div class="k">Monthly cap<small>0 to hide the bar</small></div>
+      <div class="set-row">
+        <input type="number" id="usCap" style="width:110px" min="0" step="10">
+        <span class="tl" style="color:var(--text3)">GB</span>
+      </div>
     </div>
 
     <div class="sect">
@@ -2241,6 +2329,9 @@ async function loadSettings(){
     $('ivDish').value = c.intervals.dish_s;
     $('ivSats').value = c.intervals.sats_s;
     $('ivLive').value = c.intervals.live_poll_s;
+    const us = c.usage || {};
+    $('usDay').value = us.cycle_day ?? 1;
+    $('usCap').value = us.cap_gb ?? 0;
     const ic = c.icmp || {};
     $('hzEn').checked = ic.enabled !== false;
     $('hzGood').value = ic.good_ms ?? 40;
@@ -2279,6 +2370,10 @@ $('setSave').addEventListener('click', async () => {
         sats_s:parseInt($('ivSats').value, 10),
         live_poll_s:parseInt($('ivLive').value, 10),
       },
+      usage:{
+        cycle_day:parseInt($('usDay').value, 10),
+        cap_gb:parseFloat($('usCap').value),
+      },
       icmp:{
         enabled:$('hzEn').checked,
         good_ms:parseFloat($('hzGood').value),
@@ -2301,6 +2396,7 @@ $('setSave').addEventListener('click', async () => {
     st.textContent = r.note || 'Saved';
     LIVE_MS = Math.max(1000, parseInt($('ivLive').value, 10) * 1000);
     hzPoll();
+    loadUsage();
     if (liveTimer){ setLive(false); setLive(activeView === 'dish'); }
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
@@ -2355,6 +2451,203 @@ $('pwChange').addEventListener('click', async () => {
     st.textContent = 'Password changed';
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
+
+/* ================= data usage and outage timeline ================= */
+const USG = {data:null, range:'30d'};
+
+const TL_COL = {
+  ok:'#2a2a2a', link_outage:'#ff3b30', degraded:'#d6a01d',
+  dish_unreachable:'#4a4f57',
+};
+const TL_LABEL = {
+  link_outage:'Link outage', degraded:'Degraded',
+  dish_unreachable:'Dish unreachable',
+};
+
+function gb(bytes, dp = 2){
+  if (bytes == null) return '–';
+  if (bytes >= 1e12) return (bytes / 1e12).toFixed(dp) + '<small>TB</small>';
+  if (bytes >= 1e9)  return (bytes / 1e9).toFixed(dp) + '<small>GB</small>';
+  if (bytes >= 1e6)  return (bytes / 1e6).toFixed(0) + '<small>MB</small>';
+  return (bytes / 1e3).toFixed(0) + '<small>KB</small>';
+}
+function dur(s){
+  if (s == null) return '–';
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+  return Math.floor(s / 86400) + 'd ' + Math.floor((s % 86400) / 3600) + 'h';
+}
+
+/* ---------- usage ---------- */
+function renderUsage(u){
+  const card = $('usageCard2');
+  if (!u || !u.days){ card.hidden = true; return; }
+  card.hidden = false;
+
+  const capB = u.cap_gb ? u.cap_gb * 1e9 : null;
+  $('usageTiles').innerHTML = `
+    <div class="stat"><div class="k">Today</div><div class="v">${gb(u.today)}</div></div>
+    <div class="stat"><div class="k">This Cycle</div><div class="v">${gb(u.cycle_total)}</div></div>
+    <div class="stat"><div class="k">Projected</div>
+      <div class="v ${capB && u.projected > capB ? 'bad' : ''}">${gb(u.projected)}</div></div>
+    <div class="stat"><div class="k">Speed Tests</div>
+      <div class="v">${gb(u.selftest)}<small>${u.selftest_pct ?? 0}%</small></div></div>`;
+
+  const bar = $('usageBar');
+  if (capB){
+    bar.hidden = false;
+    const pct = Math.min(100, 100 * u.cycle_total / capB);
+    const f = $('usageFill');
+    f.style.width = pct + '%';
+    f.className = pct >= 100 ? 'bad' : (pct >= 80 ? 'warn' : '');
+    /* where the projection lands, so overshoot is visible before it happens */
+    const pm = $('usageMark');
+    const proj = Math.min(100, 100 * u.projected / capB);
+    pm.hidden = false;
+    pm.style.left = proj + '%';
+  } else bar.hidden = true;
+
+  const bits = [];
+  if (capB) bits.push(`Cap <b>${u.cap_gb} GB</b>`);
+  bits.push(`Cycle from day <b>${u.cycle_day}</b>`);
+  /* Usage is only as complete as the dish was reachable — say so rather than
+     quietly under-reporting. */
+  if (u.coverage_pct != null && u.coverage_pct < 95)
+    bits.push(`<span class="warn">Only <b>${u.coverage_pct}%</b> of the cycle was sampled — actual usage is higher</span>`);
+  $('usageSub').innerHTML = bits.map(b => `<span>${b}</span>`).join('');
+  $('usageNote').textContent = `${u.days.length} days · measured from the dish`;
+
+  const labels = u.days.map(d => d.day.slice(5));
+  const o = baseOpts();
+  o.scales.x.stacked = true; o.scales.y.stacked = true;
+  o.scales.y.ticks.callback = v => (v / 1e9).toFixed(0) + ' GB';
+  o.plugins.tooltip.callbacks = {
+    label: c => `${c.dataset.label}: ${(c.parsed.y / 1e9).toFixed(2)} GB`,
+  };
+  mk('chartUsage', {type:'bar', data:{labels, datasets:[
+    {label:'Download', data:u.days.map(d => d.down), backgroundColor:'#ffffff',
+     borderRadius:0, maxBarThickness:22},
+    {label:'Upload', data:u.days.map(d => d.up), backgroundColor:css('--dim'),
+     borderRadius:0, maxBarThickness:22},
+  ]}, options:o});
+}
+
+/* ---------- outage timeline ---------- */
+function tlDraw(){
+  const d = USG.data;
+  const cv = $('tlCanvas');
+  if (!cv || !d) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth || 900, h = 58;
+  if (cv.width !== Math.round(w * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+
+  const t0 = d.since, t1 = d.now, span = Math.max(1, t1 - t0);
+  const px = ts => ((ts - t0) / span) * w;
+  const BAR_Y = 8, BAR_H = 30;
+
+  /* baseline: assume up, then paint what went wrong over it */
+  x.fillStyle = TL_COL.ok;
+  x.fillRect(0, BAR_Y, w, BAR_H);
+
+  TL.hit = [];
+  /* draw unreachable first so real outages stay visible on top of it */
+  const order = ['dish_unreachable', 'degraded', 'link_outage'];
+  for (const kind of order){
+    for (const e of (d.events || [])){
+      if (e.kind !== kind) continue;
+      const a = px(e.start), b = px(e.end);
+      const wd = Math.max(1.5, b - a);          // a 2 s blip must stay visible
+      x.fillStyle = TL_COL[kind] || TL_COL.ok;
+      x.fillRect(a, BAR_Y, wd, BAR_H);
+      TL.hit.push({x0:a, x1:a + wd, e});
+    }
+  }
+
+  /* Day boundaries. Ticks stay on every day, but labels are thinned to
+     whatever the width can fit without them running into each other. */
+  x.font = "9px 'D-DIN',Arial,sans-serif";
+  x.textAlign = 'center';
+  const DAY = 86400;
+  const days = Math.max(1, Math.ceil(span / DAY));
+  const LABEL_PX = 58;
+  const every = Math.max(1, Math.ceil(days / Math.max(1, Math.floor(w / LABEL_PX))));
+  const hourly = span <= 2 * DAY;          // short ranges label hours instead
+  const step = hourly ? 6 * 3600 : DAY;
+  const first = Math.ceil(t0 / step) * step;
+  let i = 0;
+  for (let t = first; t < t1; t += step, i++){
+    const p = px(t);
+    if (p < 10 || p > w - 10) continue;
+    const major = hourly ? true : (i % every === 0);
+    x.strokeStyle = major ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.07)';
+    x.beginPath(); x.moveTo(p, BAR_Y); x.lineTo(p, BAR_Y + BAR_H); x.stroke();
+    if (!major) continue;
+    x.fillStyle = '#565b63';
+    x.fillText(
+      new Date(t * 1000).toLocaleString([], hourly
+        ? {hour:'2-digit', minute:'2-digit'}
+        : {day:'numeric', month:'short'}),
+      p, BAR_Y + BAR_H + 13);
+  }
+}
+const TL = {hit:[]};
+
+function renderTimeline(d){
+  USG.data = d;
+  const av = d.availability, cov = d.coverage_pct;
+  $('tlStats').innerHTML = `
+    <div class="stat"><div class="k">Link Availability</div>
+      <div class="v ${av != null && av < 99.5 ? 'bad' : ''}">${av != null ? av.toFixed(3) : '–'}<small>%</small></div></div>
+    <div class="stat"><div class="k">Observed</div>
+      <div class="v ${cov != null && cov < 95 ? 'bad' : ''}">${cov != null ? cov.toFixed(1) : '–'}<small>% of range</small></div></div>
+    <div class="stat"><div class="k">Link Lost</div><div class="v">${dur(d.lost_s)}</div></div>
+    <div class="stat"><div class="k">Incidents</div><div class="v">${(d.events || []).length}</div></div>`;
+
+  $('tlNote').textContent = d.range.toUpperCase()
+    + (cov != null && cov < 95 ? ` · only ${cov.toFixed(0)}% observed` : '');
+  $('tlFrom').textContent = fmtFull(d.since);
+  $('tlTo').textContent = fmtFull(d.now);
+
+  $('tlBody').innerHTML = (d.events || []).map(e => {
+    const cls = {link_outage:'link', dish_unreachable:'blind', degraded:'deg'}[e.kind] || '';
+    return `<tr>
+      <td>${fmtFull(e.start)}</td>
+      <td><span class="evkind ${cls}">${TL_LABEL[e.kind] || e.kind}</span></td>
+      <td class="r">${dur(e.duration_s)}</td>
+      <td class="r dim">${e.worst_drop ? e.worst_drop + '%' : '–'}</td>
+      <td class="dim" style="white-space:normal;max-width:420px">${e.detail || ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">No incidents in range</td></tr>`;
+
+  tlDraw();
+}
+
+$('tlCanvas')?.addEventListener('mousemove', ev => {
+  const r = ev.target.getBoundingClientRect();
+  const mx = ev.clientX - r.left;
+  const hit = TL.hit.find(h => mx >= h.x0 - 2 && mx <= h.x1 + 2);
+  $('tlCap').innerHTML = hit
+    ? `<b>${TL_LABEL[hit.e.kind]}</b> · ${fmtFull(hit.e.start)} · lasted <b>${dur(hit.e.duration_s)}</b>`
+      + (hit.e.worst_drop ? ` · worst drop ${hit.e.worst_drop}%` : '')
+    : (USG.data
+        ? `Link up · hover a marker for detail`
+        : 'Hover the timeline for detail');
+});
+
+async function loadUsage(){
+  try{
+    const res = await fetch('usage.php?range=' + (range === '3h' ? '24h' : range),
+                            {cache:'no-store'});
+    const d = await res.json();
+    if (d.error) return;
+    renderUsage(d.usage);
+    renderTimeline(d);
+  }catch(e){}
+}
 
 /* ================= tab title and favicon ================= */
 /* A monitoring dashboard is usually left open in a background tab, so the
@@ -2576,7 +2869,7 @@ function hzSetLive(on){
 let hzRz;
 window.addEventListener('resize', () => {
   clearTimeout(hzRz);
-  hzRz = setTimeout(() => { if (HZ.data) hzRender(HZ.data); }, 150);
+  hzRz = setTimeout(() => { if (HZ.data) hzRender(HZ.data); tlDraw(); }, 150);
 });
 
 /* ================= software update ================= */
@@ -2742,6 +3035,7 @@ async function load(){
     setStatus('bad', 'Offline \u00b7 Stardashy');
   }
   loadSky();
+  loadUsage();
   hideSplash();
 }
 

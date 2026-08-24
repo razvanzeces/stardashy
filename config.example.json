@@ -39,6 +39,10 @@
     "retention": {
         "days": 0
     },
+    "usage": {
+        "cycle_day": 1,
+        "cap_gb": 0
+    },
     "telegram": {
         "token": "",
         "chat_id": ""
