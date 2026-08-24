@@ -168,7 +168,9 @@ function ptr_lookup(string $ip): string {
     }
     if (!isset($cache[$ip])) {
         $host = @gethostbyaddr($ip);
-        $cache[$ip] = ($host !== false && $host !== $ip) ? $host : '';
+        $ok = $host !== false && $host !== $ip
+            && preg_match('/^[A-Za-z0-9]([A-Za-z0-9._\-]{0,251}[A-Za-z0-9])?$/', $host);
+        $cache[$ip] = $ok ? $host : '';
         @file_put_contents($cacheFile, json_encode($cache));
     }
     return $cache[$ip];
