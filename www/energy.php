@@ -21,7 +21,10 @@ $cfg   = is_file($CFG) ? (json_decode((string) file_get_contents($CFG), true) ?:
 $en    = $cfg['energy'] ?? [];
 $price = max(0, (float) ($en['price_per_kwh'] ?? 0));
 $cur   = preg_replace('/[^\p{L}\p{Sc}. ]/u', '', (string) ($en['currency'] ?? '')) ?: '';
-$cur   = mb_strcut($cur, 0, 8);
+// substr, not mb_strcut: mbstring is a separate package on Raspberry Pi OS and
+// is not installed by default. The regex above already reduced this to letters
+// and currency signs, so a byte-wise cut is safe here.
+$cur   = substr($cur, 0, 8);
 
 try {
     $db = new SQLite3($DB, SQLITE3_OPEN_READONLY);

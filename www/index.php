@@ -280,11 +280,32 @@ select option{background:#0a0a0a}
 .evkind.blind{border-color:var(--text3);color:var(--text3)}
 .evkind.deg{border-color:var(--warn);color:var(--warn)}
 
-/* ---- PoP badge ---- */
-.hitem.pop{gap:9px}
-.hitem.pop .flag{font-size:15px;line-height:1;letter-spacing:0;filter:saturate(.92)}
-.hitem.pop .popsub{color:var(--text3);letter-spacing:.1em;font-size:10px}
-.hitem.pop .popsub b{color:var(--text2)}
+/* ---- test edge chip ---- */
+/* Labelled, because "SOFIA · SOF · 438 KM" on its own means nothing to
+   anyone who does not already know what a Cloudflare colo code is. */
+.popbox{
+  display:inline-flex;align-items:stretch;border:1px solid var(--line);
+  border-radius:2px;overflow:hidden;line-height:1;cursor:default;
+}
+.popbox .lbl{
+  display:flex;align-items:center;padding:0 9px;
+  background:rgba(255,255,255,.05);border-right:1px solid var(--line);
+  font-size:9px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text3);white-space:nowrap;
+}
+.popbox .val{
+  display:flex;align-items:center;gap:8px;padding:6px 11px;
+  font-size:11px;letter-spacing:.1em;white-space:nowrap;
+}
+.popbox .flag{font-size:14px;line-height:1;letter-spacing:0;filter:saturate(.92)}
+.popbox b{color:var(--text);font-weight:600;text-transform:uppercase;letter-spacing:.12em}
+.popbox .popsub{color:var(--text3);font-size:10px;letter-spacing:.1em;
+  font-variant-numeric:tabular-nums}
+.popbox .popsub b{color:var(--text2);font-weight:600}
+@media (max-width:820px){
+  .popbox .lbl{display:none}
+  .popbox .popsub{display:none}
+}
 
 /* ---- hero deltas ---- */
 .dlt{font-size:11px;letter-spacing:.1em;margin-left:9px;font-variant-numeric:tabular-nums;
@@ -581,8 +602,13 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <span class="brand-sub">Monitoring</span>
     </div>
     <div class="hstatus">
-      <span class="hitem pop" id="popItem" title="Cloudflare edge serving this connection">
-        <span class="flag" id="popFlag"></span><b id="popName">—</b><span class="popsub" id="popSub"></span>
+      <span class="popbox" id="popItem">
+        <span class="lbl">Test Edge</span>
+        <span class="val">
+          <span class="flag" id="popFlag"></span>
+          <b id="popName">—</b>
+          <span class="popsub" id="popSub"></span>
+        </span>
       </span>
       <span class="throttle" id="thrBadge" title="The dish reports it is being rate limited">
         <svg class="ic" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
@@ -1613,20 +1639,32 @@ function renderSats(sats){
 /* ================= dish history charts ================= */
 /* The dish tells us when it is rate limited and why, so there is no need to
    infer throttling from a speed graph. NO_LIMIT is the normal state. */
+/* Only these four mean the dish is genuinely restricting bandwidth. Matching
+   a known list, rather than "anything that is not NO_LIMIT", keeps the badge
+   fail-safe: a missing field, an unexpected string, or an enum arriving as a
+   number all leave it hidden. A warning that fires without cause is worse
+   than no warning, and this one sits in the header where it cannot be
+   ignored. */
+const THROTTLE_REASONS = {
+  POLICY_LIMIT: 'Policy limit',
+  USER_CUSTOM_LIMIT: 'Custom limit',
+  OVERAGE_LIMIT: 'Overage limit',
+  LOW_SPEED_POLICY_LIMIT: 'Low-speed policy',
+};
+
 function renderThrottle(latest){
-  const bad = v => v && v !== 'NO_LIMIT' && v !== 'UNKNOWN';
-  const dl = latest?.dl_limit, ul = latest?.ul_limit;
-  const on = bad(dl) || bad(ul);
-  $('thrBadge').classList.toggle('on', on);
-  if (!on) return;
-  const pretty = v => (v || '').replace(/_/g, ' ').toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase());
+  const badge = $('thrBadge');
+  if (!badge) return;
+  const named = v => (typeof v === 'string'
+    && THROTTLE_REASONS[v.trim().toUpperCase()]) || null;
+  const dl = named(latest?.dl_limit), ul = named(latest?.ul_limit);
+  if (!dl && !ul){ badge.classList.remove('on'); return; }
   const parts = [];
-  if (bad(dl)) parts.push('\u2193 ' + pretty(dl));
-  if (bad(ul)) parts.push('\u2191 ' + pretty(ul));
-  $('thrText').textContent = parts.join(' · ');
-  $('thrBadge').title =
-    `The dish reports bandwidth restriction: ${[dl, ul].filter(bad).join(', ')}`;
+  if (dl) parts.push('\u2193 ' + dl);
+  if (ul) parts.push('\u2191 ' + ul);
+  $('thrText').textContent = parts.join(' \u00b7 ');
+  badge.title = 'The dish reports it is being rate limited: ' + parts.join(', ');
+  badge.classList.add('on');
 }
 
 function renderDishHistory(dish){
@@ -2984,11 +3022,11 @@ function renderPop(latest, cfg){
   const code = (latest.colo || '').toUpperCase();
   const c = (typeof COLOS !== 'undefined' && COLOS[code]) || null;
   $('popFlag').textContent = c ? flagOf(c[1]) : '\uD83C\uDF10';
-  $('popName').textContent = c ? c[0] : (code || '—');
+  /* City plus country reads as a place; a bare city name does not tell you
+     it is abroad, which is the whole point of showing it. */
+  $('popName').textContent = c ? `${c[0]}, ${c[1]}` : (code || 'Unknown');
 
   const bits = [];
-  /* Only repeat the code when the name is a real city — for an unknown colo
-     the name already is the code. */
   if (code && c) bits.push(code);
   const q = cfg && cfg.qth;
   if (c && q){
@@ -2998,10 +3036,18 @@ function renderPop(latest, cfg){
     bits.push(`<b>${String(km).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009')}</b> km`);
   }
   $('popSub').innerHTML = bits.join(' \u00b7 ');
+
+  /* Spell the whole thing out on hover. This is the Cloudflare datacentre the
+     speed test terminated at — deliberately not called a PoP, because the
+     Starlink PoP is a different hop and already has its own latency figure on
+     the Dish tab. */
   $('popItem').title = c
-    ? `Cloudflare edge: ${c[0]}, ${c[1]} (${code})`
-      + (latest.country ? ` \u2014 you appear to be in ${latest.country}` : '')
-    : `Cloudflare edge ${code || 'unknown'}`;
+    ? `Speed tests are terminating at the Cloudflare edge in `
+      + `${c[0]}, ${c[1]} (${code})`
+      + (q ? `, about ${Math.round(kmBetween(q.lat, q.lon, c[2], c[3]))} km from your dish` : '')
+      + `.\nThis is not your Starlink ground station — see PoP latency on the Dish tab for that.`
+      + (latest.country ? `\nYour connection appears to originate in ${latest.country}.` : '')
+    : `Speed tests are terminating at Cloudflare edge ${code || '(unknown)'}.`;
 }
 
 /* ================= relative clock ================= */
