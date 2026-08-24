@@ -222,6 +222,28 @@ select option{background:#0a0a0a}
 @keyframes spIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes spBar{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
 
+/* ---- energy ---- */
+.enhero .num{color:var(--text)}
+.watt{position:relative;height:8px;background:rgba(255,255,255,.07);margin-top:16px}
+.watt i{position:absolute;top:0;bottom:0;left:0;background:var(--text);transition:width .5s ease}
+.watt i.heat{background:var(--warn)}
+.watt s{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--text3);
+  text-decoration:none}
+.heatpill{display:inline-flex;align-items:center;gap:7px;margin-top:12px;
+  font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--warn);
+  border:1px solid var(--warn);border-radius:2px;padding:3px 10px}
+.heatpill.off{display:none}
+.costgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0}
+.enote{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);
+  padding:14px 2px 0;display:flex;gap:18px;flex-wrap:wrap}
+.enote b{color:var(--text2)}
+
+/* ---- throttle badge ---- */
+.throttle{display:none;align-items:center;gap:7px;font-size:10px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--warn);
+  border:1px solid var(--warn);border-radius:2px;padding:3px 9px}
+.throttle.on{display:inline-flex}
+
 /* ---- data usage ---- */
 .ubar{height:6px;background:rgba(255,255,255,.08);margin-top:14px;position:relative;overflow:hidden}
 .ubar i{position:absolute;left:0;top:0;bottom:0;background:var(--text);transition:width .4s ease}
@@ -234,6 +256,13 @@ select option{background:#0a0a0a}
 .unote .warn{color:var(--warn)}
 
 /* ---- outage timeline ---- */
+.causebar{display:flex;flex-wrap:wrap;gap:8px 22px;padding:16px 2px 2px;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3)}
+.causebar span{display:flex;align-items:center;gap:8px}
+.causebar b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.causebar i{width:9px;height:9px;border-radius:1px;background:var(--red);flex:none}
+.causebar i.deg{background:var(--warn)}
+.causebar i.blind{background:#4a4f57}
 .tlwrap{padding:20px 2px 4px}
 #tlCanvas{width:100%;height:58px;display:block;cursor:crosshair}
 .tlaxis{display:flex;justify-content:space-between;font-size:9px;letter-spacing:.12em;
@@ -555,6 +584,10 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <span class="hitem pop" id="popItem" title="Cloudflare edge serving this connection">
         <span class="flag" id="popFlag"></span><b id="popName">—</b><span class="popsub" id="popSub"></span>
       </span>
+      <span class="throttle" id="thrBadge" title="The dish reports it is being rate limited">
+        <svg class="ic" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+        <span id="thrText"></span>
+      </span>
       <span class="hitem"><span class="sdot" id="dot"></span><span id="lastRun">Connecting</span></span>
     </div>
   </div>
@@ -568,6 +601,9 @@ tr:hover td{background:rgba(255,255,255,.03)}
     <button data-view="sats">
       <svg class="ic" viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" transform="rotate(45 12 12)"/><path d="M3.5 8.5l4 4M16.5 11.5l4 4M8.5 3.5l4 4M11.5 16.5l4 4"/></svg>
       Sats</button>
+    <button data-view="energy">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+      Energy</button>
     <button data-view="tests">
       <svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       Tests</button>
@@ -780,6 +816,64 @@ tr:hover td{background:rgba(255,255,255,.03)}
   <div class="tnote">Serving candidate inferred from public TLEs vs dish boresight — the dish switches satellites every ~15s, this is the per-minute dominant candidate</div>
 </section>
 
+<!-- ============ ENERGY ============ -->
+<section class="view" id="view-energy">
+  <div id="enOff" class="empty" hidden>
+    This dish does not report input power on its firmware
+  </div>
+  <div id="enOn" hidden>
+    <div class="hero enhero">
+      <div class="metric">
+        <div class="label"><svg class="ic" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>Drawing Now</div>
+        <div class="num"><span id="enNow">–</span><span class="unit">W</span></div>
+        <div class="sub" id="enNowSub">&nbsp;</div>
+        <div class="watt"><i id="enBar"></i><s id="enIdleMark" hidden></s></div>
+        <div class="heatpill off" id="enHeat">
+          <svg class="ic" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M12 3c2 4-2 5 0 9 3-2 4-6 2-9z"/><path d="M5 14a7 7 0 0 0 14 0"/></svg>
+          Snow melt active
+        </div>
+      </div>
+      <div class="metric">
+        <div class="label"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>Today</div>
+        <div class="num"><span id="enToday">–</span><span class="unit">kWh</span></div>
+        <div class="sub" id="enTodaySub">&nbsp;</div>
+      </div>
+      <div class="metric">
+        <div class="label"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>This Month</div>
+        <div class="num"><span id="enMonth">–</span><span class="unit">kWh</span></div>
+        <div class="sub" id="enMonthSub">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="enote" id="enSplit"></div>
+
+    <div class="seg" data-seg role="tablist" aria-label="Time range">
+      <button data-range="3h">3H</button>
+      <button data-range="24h" class="active">24H</button>
+      <button data-range="7d">7D</button>
+      <button data-range="30d">30D</button>
+    </div>
+
+    <div class="chart-block">
+      <div class="chart-title"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 6-8 3 4"/></svg>Power Draw
+        <span class="livebadge"><span id="enHeatNote"></span></span>
+      </div>
+      <div class="chart-wrap"><canvas id="chartPower"></canvas></div>
+    </div>
+
+    <div class="sect"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Daily Consumption</div>
+    <div class="chart-block"><div class="chart-wrap short"><canvas id="chartDayWh"></canvas></div></div>
+
+    <div class="sect"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Statistics<small id="enStatNote"></small></div>
+    <div class="stats" id="enStats"></div>
+
+    <div id="enCostCard" hidden>
+      <div class="sect"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a3 3 0 0 0-3-1.5c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2a3 3 0 0 1-3-1.5"/><path d="M12 6v12"/></svg>Running Cost<small id="enPriceNote"></small></div>
+      <div class="costgrid" id="enCost"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ TESTS ============ -->
 <section class="view" id="view-tests">
   <div class="seg" data-seg role="tablist" aria-label="Time range">
@@ -823,6 +917,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
     Outage Timeline<small id="tlNote"></small>
   </div>
   <div class="stats" id="tlStats"></div>
+  <div class="causebar" id="tlCauses" hidden></div>
   <div class="tlwrap">
     <canvas id="tlCanvas" width="2000" height="116"></canvas>
     <div class="tlaxis"><span id="tlFrom"></span><span id="tlTo"></span></div>
@@ -1025,6 +1120,12 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <div class="set-row">
         <input type="number" id="usCap" style="width:110px" min="0" step="10">
         <span class="tl" style="color:var(--text3)">GB</span>
+      </div>
+      <div class="k">Electricity price<small>0 hides the cost panel</small></div>
+      <div class="set-row">
+        <input type="number" id="enPrice" style="width:110px" min="0" step="0.01">
+        <input type="text" id="enCur" style="width:90px" placeholder="EUR" maxlength="8">
+        <span class="tl" style="color:var(--text3)">per kWh</span>
       </div>
     </div>
 
@@ -1510,6 +1611,24 @@ function renderSats(sats){
 }
 
 /* ================= dish history charts ================= */
+/* The dish tells us when it is rate limited and why, so there is no need to
+   infer throttling from a speed graph. NO_LIMIT is the normal state. */
+function renderThrottle(latest){
+  const bad = v => v && v !== 'NO_LIMIT' && v !== 'UNKNOWN';
+  const dl = latest?.dl_limit, ul = latest?.ul_limit;
+  const on = bad(dl) || bad(ul);
+  $('thrBadge').classList.toggle('on', on);
+  if (!on) return;
+  const pretty = v => (v || '').replace(/_/g, ' ').toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+  const parts = [];
+  if (bad(dl)) parts.push('\u2193 ' + pretty(dl));
+  if (bad(ul)) parts.push('\u2191 ' + pretty(ul));
+  $('thrText').textContent = parts.join(' · ');
+  $('thrBadge').title =
+    `The dish reports bandwidth restriction: ${[dl, ul].filter(bad).join(', ')}`;
+}
+
 function renderDishHistory(dish){
   const dr = dish?.rows || [];
   const labels = dr.map(r => fmtTs(r.ts));
@@ -1538,6 +1657,7 @@ function renderDishHistory(dish){
   ]}, options:baseOpts()});
 
   const l = dish?.latest;
+  renderThrottle(l);
   if (l){
     let alerts = [];
     try { alerts = l.alerts ? JSON.parse(l.alerts) : []; } catch(e){}
@@ -2332,6 +2452,9 @@ async function loadSettings(){
     const us = c.usage || {};
     $('usDay').value = us.cycle_day ?? 1;
     $('usCap').value = us.cap_gb ?? 0;
+    const eg = c.energy || {};
+    $('enPrice').value = eg.price_per_kwh ?? 0;
+    $('enCur').value = eg.currency ?? 'EUR';
     const ic = c.icmp || {};
     $('hzEn').checked = ic.enabled !== false;
     $('hzGood').value = ic.good_ms ?? 40;
@@ -2370,6 +2493,10 @@ $('setSave').addEventListener('click', async () => {
         sats_s:parseInt($('ivSats').value, 10),
         live_poll_s:parseInt($('ivLive').value, 10),
       },
+      energy:{
+        price_per_kwh:parseFloat($('enPrice').value),
+        currency:$('enCur').value.trim(),
+      },
       usage:{
         cycle_day:parseInt($('usDay').value, 10),
         cap_gb:parseFloat($('usCap').value),
@@ -2397,6 +2524,7 @@ $('setSave').addEventListener('click', async () => {
     LIVE_MS = Math.max(1000, parseInt($('ivLive').value, 10) * 1000);
     hzPoll();
     loadUsage();
+    loadEnergy();
     if (liveTimer){ setLive(false); setLive(activeView === 'dish'); }
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
@@ -2452,6 +2580,143 @@ $('pwChange').addEventListener('click', async () => {
   }catch(e){ st.textContent = 'Error: ' + e.message; }
 });
 
+/* ================= energy ================= */
+const EN = {data:null};
+
+function kwh(w, dp = 2){ return w == null ? '–' : (w / 1000).toFixed(dp); }
+function money(kw, price, cur){
+  if (!price) return null;
+  const v = kw * price;
+  return (v < 10 ? v.toFixed(2) : v.toFixed(1)) + (cur ? ' ' + cur : '');
+}
+
+function renderEnergy(d){
+  EN.data = d;
+  const off = $('enOff'), on = $('enOn');
+  if (!d || !d.supported){
+    off.hidden = false; on.hidden = true;
+    off.textContent = d && d.waiting
+      ? 'Waiting for the first power sample from the dish'
+      : 'This dish does not report input power on its firmware';
+    return;
+  }
+  off.hidden = true; on.hidden = false;
+
+  const L = d.latest || {}, st = d.stats || {};
+  const w = L.power_w;
+  $('enNow').textContent = w != null ? w.toFixed(0) : '–';
+
+  /* Scale the bar against the observed maximum so it means something for
+     this dish rather than against an arbitrary ceiling. */
+  const top = Math.max(st.max_w || 0, w || 0, 1);
+  const bar = $('enBar');
+  bar.style.width = Math.min(100, 100 * (w || 0) / top) + '%';
+  bar.className = L.heating ? 'heat' : '';
+  if (st.idle_w != null){
+    const m = $('enIdleMark');
+    m.hidden = false;
+    m.style.left = Math.min(100, 100 * st.idle_w / top) + '%';
+    m.title = `Idle ${st.idle_w} W`;
+  }
+  $('enHeat').classList.toggle('off', !L.heating);
+  $('enNowSub').innerHTML = st.idle_w != null
+    ? `Idle <b>${st.idle_w}</b> W · Peak <b>${st.max_w}</b> W`
+    : '&nbsp;';
+
+  $('enToday').textContent = kwh(d.today_wh);
+  const dy = d.yesterday_wh, tw = d.today_wh;
+  $('enTodaySub').innerHTML = dy
+    ? `Yesterday <b>${kwh(dy)}</b> kWh` + deltaHtml(tw, dy, false, ' Wh')
+    : '&nbsp;';
+
+  $('enMonth').textContent = kwh(d.month_wh);
+  $('enMonthSub').innerHTML = `Projected <b>${kwh(d.projected_wh)}</b> kWh`
+    + (d.avg_day_wh ? ` · <b>${kwh(d.avg_day_wh, 2)}</b> kWh/day` : '');
+
+  const sp = [];
+  if (L.dish_power_w != null && L.dish_power_w > 0)
+    sp.push(`Dish <b>${L.dish_power_w.toFixed(1)} W</b>`);
+  if (L.router_power_w != null && L.router_power_w > 0)
+    sp.push(`Router <b>${L.router_power_w.toFixed(1)} W</b>`);
+  if (st.heating_s) sp.push(`Snow melt <b>${dur(st.heating_s)}</b> in range`);
+  sp.push(`<b>${st.samples}</b> samples`);
+  $('enSplit').innerHTML = sp.map(x => `<span>${x}</span>`).join('');
+
+  /* --- power over time, with heating shaded --- */
+  const labels = d.series.map(p => fmtTs(p.ts));
+  const heatIdx = new Set(d.series.map((p, i) => p.heating ? i : -1).filter(i => i >= 0));
+  $('enHeatNote').textContent = heatIdx.size
+    ? heatIdx.size + ' buckets with snow melt' : '';
+  const o = baseOpts();
+  o.scales.y.ticks.callback = v => v + ' W';
+  o.plugins.tooltip.callbacks = {
+    label: c => `${c.dataset.label}: ${c.parsed.y} W`
+      + (heatIdx.has(c.dataIndex) ? ' · heating' : ''),
+  };
+  const ctxP = $('chartPower').getContext('2d');
+  mk('chartPower', {type:'line', data:{labels, datasets:[
+    line('Average', d.series.map(p => p.w), '#ffffff',
+      {fill:true, backgroundColor:faintFill(ctxP)}),
+    line('Peak', d.series.map(p => p.wmax), css('--text3'), {borderDash:[3,3]}),
+    /* Heating shows as amber points on the average line rather than a second
+       series, so the shape of the curve stays readable. */
+    {label:'Snow melt', type:'line', data:d.series.map((p, i) => heatIdx.has(i) ? p.w : null),
+     borderColor:'transparent', backgroundColor:css('--warn'),
+     pointRadius:3, pointHoverRadius:5, showLine:false, spanGaps:false},
+  ]}, options:o});
+
+  /* --- per-day kWh --- */
+  const od = baseOpts();
+  od.plugins.legend.display = false;
+  od.scales.y.ticks.callback = v => (v / 1000).toFixed(1) + ' kWh';
+  od.plugins.tooltip.callbacks = {
+    label: c => `${(c.parsed.y / 1000).toFixed(3)} kWh`
+      + (d.days[c.dataIndex]?.heat_s ? ` · melt ${dur(d.days[c.dataIndex].heat_s)}` : ''),
+  };
+  mk('chartDayWh', {type:'bar', data:{labels:d.days.map(x => x.day.slice(5)), datasets:[{
+    label:'kWh', data:d.days.map(x => x.wh),
+    backgroundColor:d.days.map(x => x.heat_s ? css('--warn') : '#ffffff'),
+    borderRadius:0, maxBarThickness:22,
+  }]}, options:od});
+
+  $('enStatNote').textContent = d.range.toUpperCase() + ' · bucket ' + dur(d.bucket);
+  $('enStats').innerHTML = `
+    <div class="stat"><div class="k">Idle Draw</div><div class="v">${st.idle_w ?? '–'}<small>W</small></div></div>
+    <div class="stat"><div class="k">Average</div><div class="v">${st.avg_w ?? '–'}<small>W</small></div></div>
+    <div class="stat"><div class="k">Peak</div><div class="v">${st.max_w ?? '–'}<small>W</small></div></div>
+    <div class="stat"><div class="k">Total In Range</div><div class="v">${kwh(st.total_wh)}<small>kWh</small></div></div>
+    <div class="stat"><div class="k">Per Day</div><div class="v">${kwh(d.avg_day_wh, 2)}<small>kWh</small></div></div>
+    <div class="stat"><div class="k">Per Year</div><div class="v">${kwh(d.avg_day_wh * 365, 0)}<small>kWh</small></div></div>
+    <div class="stat"><div class="k">Snow Melt</div>
+      <div class="v ${st.heating_s ? 'bad' : ''}">${st.heating_s ? dur(st.heating_s) : 'none'}</div></div>
+    <div class="stat"><div class="k">Samples</div><div class="v">${st.samples}</div></div>`;
+
+  /* --- cost --- */
+  const card = $('enCostCard');
+  if (d.price){
+    card.hidden = false;
+    const perDay = d.avg_day_wh / 1000, cur = d.currency;
+    $('enPriceNote').textContent = `${d.price} ${cur}/kWh`;
+    $('enCost').innerHTML = `
+      <div class="usum"><div class="k">Today</div>
+        <div class="v">${money(d.today_wh / 1000, d.price, cur)}</div></div>
+      <div class="usum"><div class="k">This Month</div>
+        <div class="v">${money(d.month_wh / 1000, d.price, cur)}</div></div>
+      <div class="usum"><div class="k">Projected Month</div>
+        <div class="v">${money(d.projected_wh / 1000, d.price, cur)}</div></div>
+      <div class="usum"><div class="k">Per Year</div>
+        <div class="v">${money(perDay * 365, d.price, cur)}</div></div>`;
+  } else card.hidden = true;
+}
+
+async function loadEnergy(){
+  try{
+    const res = await fetch('energy.php?range=' + (range === '3h' ? '24h' : range),
+                            {cache:'no-store'});
+    renderEnergy(await res.json());
+  }catch(e){}
+}
+
 /* ================= data usage and outage timeline ================= */
 const USG = {data:null, range:'30d'};
 
@@ -2463,6 +2728,26 @@ const TL_LABEL = {
   link_outage:'Link outage', degraded:'Degraded',
   dish_unreachable:'Dish unreachable',
 };
+/* Causes reported by the dish itself. Anything not listed still renders,
+   just with its raw enum name tidied up. */
+const CAUSE_LABEL = {
+  OBSTRUCTED:'Obstructed', NO_SATS:'No satellites', NO_SCHEDULE:'No schedule',
+  NO_DOWNLINK:'No downlink', NO_PINGS:'No pings', SKY_SEARCH:'Sky search',
+  THERMAL_SHUTDOWN:'Thermal shutdown', THERMAL_THROTTLE:'Thermal throttle',
+  STOWED:'Stowed', BOOTING:'Booting', SLEEPING:'Sleeping',
+  ACTUATOR_ACTIVITY:'Actuator activity', CABLE_TEST:'Cable test',
+  INHIBIT_RF:'RF inhibited', UNKNOWN:'Unknown',
+};
+const causeName = c => CAUSE_LABEL[c]
+  || (c || '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, m => m.toUpperCase());
+/* Obstruction is the user's own problem to fix; a thermal or stow event is
+   the hardware; the rest is the network. Colouring by that grouping makes
+   the timeline answer "whose fault" at a glance. */
+const CAUSE_CLASS = {
+  OBSTRUCTED:'deg', SKY_SEARCH:'deg',
+  THERMAL_SHUTDOWN:'link', THERMAL_THROTTLE:'link', STOWED:'blind',
+  BOOTING:'blind', SLEEPING:'blind', CABLE_TEST:'blind', INHIBIT_RF:'blind',
+};
 
 function gb(bytes, dp = 2){
   if (bytes == null) return '–';
@@ -2473,7 +2758,10 @@ function gb(bytes, dp = 2){
 }
 function dur(s){
   if (s == null) return '–';
-  if (s < 60) return s + 's';
+  /* Durations arrive as floats (the dish reports nanoseconds), so round
+     before formatting — otherwise a sum lands as 31.099999999999998s. */
+  if (s < 60) return (s < 10 ? Math.round(s * 10) / 10 : Math.round(s)) + 's';
+  s = Math.round(s);
   if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
   if (s < 86400) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
   return Math.floor(s / 86400) + 'd ' + Math.floor((s % 86400) / 3600) + 'h';
@@ -2561,7 +2849,10 @@ function tlDraw(){
       if (e.kind !== kind) continue;
       const a = px(e.start), b = px(e.end);
       const wd = Math.max(1.5, b - a);          // a 2 s blip must stay visible
-      x.fillStyle = TL_COL[kind] || TL_COL.ok;
+      const byCause = e.cause ? CAUSE_CLASS[e.cause] : null;
+      x.fillStyle = byCause === 'deg' ? TL_COL.degraded
+                  : byCause === 'blind' ? TL_COL.dish_unreachable
+                  : (TL_COL[kind] || TL_COL.ok);
       x.fillRect(a, BAR_Y, wd, BAR_H);
       TL.hit.push({x0:a, x1:a + wd, e});
     }
@@ -2608,15 +2899,29 @@ function renderTimeline(d){
     <div class="stat"><div class="k">Incidents</div><div class="v">${(d.events || []).length}</div></div>`;
 
   $('tlNote').textContent = d.range.toUpperCase()
+    + (d.cause_source === 'dish' ? ' · causes reported by the dish' : ' · causes inferred')
     + (cov != null && cov < 95 ? ` · only ${cov.toFixed(0)}% observed` : '');
+
+  const bc = d.by_cause || {};
+  const keys = Object.keys(bc);
+  $('tlCauses').innerHTML = keys.length
+    ? keys.map(c => {
+        const cls = CAUSE_CLASS[c] || 'link';
+        return `<span><i class="${cls}"></i>${causeName(c)} <b>${dur(Math.round(bc[c]))}</b></span>`;
+      }).join('')
+    : '';
+  $('tlCauses').hidden = !keys.length;
   $('tlFrom').textContent = fmtFull(d.since);
   $('tlTo').textContent = fmtFull(d.now);
 
   $('tlBody').innerHTML = (d.events || []).map(e => {
-    const cls = {link_outage:'link', dish_unreachable:'blind', degraded:'deg'}[e.kind] || '';
+    const byKind = {link_outage:'link', dish_unreachable:'blind', degraded:'deg'}[e.kind] || '';
+    const cls = e.cause ? (CAUSE_CLASS[e.cause] ?? byKind) : byKind;
+    const label = e.cause ? causeName(e.cause) : (TL_LABEL[e.kind] || e.kind);
     return `<tr>
       <td>${fmtFull(e.start)}</td>
-      <td><span class="evkind ${cls}">${TL_LABEL[e.kind] || e.kind}</span></td>
+      <td><span class="evkind ${cls}">${label}</span>${
+        e.did_switch ? '<span class="mut" style="margin-left:8px">switched</span>' : ''}</td>
       <td class="r">${dur(e.duration_s)}</td>
       <td class="r dim">${e.worst_drop ? e.worst_drop + '%' : '–'}</td>
       <td class="dim" style="white-space:normal;max-width:420px">${e.detail || ''}</td>
@@ -2631,7 +2936,8 @@ $('tlCanvas')?.addEventListener('mousemove', ev => {
   const mx = ev.clientX - r.left;
   const hit = TL.hit.find(h => mx >= h.x0 - 2 && mx <= h.x1 + 2);
   $('tlCap').innerHTML = hit
-    ? `<b>${TL_LABEL[hit.e.kind]}</b> · ${fmtFull(hit.e.start)} · lasted <b>${dur(hit.e.duration_s)}</b>`
+    ? `<b>${hit.e.cause ? causeName(hit.e.cause) : TL_LABEL[hit.e.kind]}</b>`
+      + ` · ${fmtFull(hit.e.start)} · lasted <b>${dur(hit.e.duration_s)}</b>`
       + (hit.e.worst_drop ? ` · worst drop ${hit.e.worst_drop}%` : '')
     : (USG.data
         ? `Link up · hover a marker for detail`
@@ -3036,6 +3342,7 @@ async function load(){
   }
   loadSky();
   loadUsage();
+  if (activeView === 'energy') loadEnergy();
   hideSplash();
 }
 
@@ -3050,6 +3357,7 @@ document.querySelectorAll('.nav button').forEach(b => {
     setLive(activeView === 'dish');
     setGeo(activeView === 'sats');
     hzSetLive(activeView === 'dash');
+    if (activeView === 'energy') loadEnergy();
     if (activeView === 'debug' || activeView === 'settings') checkAuth();
   });
 });

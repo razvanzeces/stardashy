@@ -122,6 +122,35 @@ $q = $db->prepare(
 $q->bindValue(':s', $since, SQLITE3_INTEGER);
 $res = $q->execute();
 
+/* If the dish's own outage log is present, use it: it carries a cause and
+   nanosecond timing, which beats anything inferred from a per-minute drop
+   rate. The inferred path stays for databases predating that table. */
+$hasOutageLog = (bool) $db->querySingle(
+    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='outages'");
+$dishOutages = [];
+if ($hasOutageLog) {
+    $oq = $db->prepare(
+        'SELECT ts, cause, duration_s, did_switch FROM outages
+         WHERE ts >= :s ORDER BY ts');
+    $oq->bindValue(':s', $since, SQLITE3_INTEGER);
+    $ores = $oq->execute();
+    while ($o = $ores->fetchArray(SQLITE3_ASSOC)) {
+        $dishOutages[] = [
+            'kind'       => 'link_outage',
+            'cause'      => $o['cause'],
+            'start'      => (int) $o['ts'],
+            'end'        => (int) $o['ts'] + (int) ceil((float) $o['duration_s']),
+            'duration_s' => round((float) $o['duration_s'], 1),
+            'minutes'    => 1,
+            'outage_s'   => (float) $o['duration_s'],
+            'worst_drop' => 0,
+            'did_switch' => (bool) $o['did_switch'],
+            'detail'     => null,
+            'source'     => 'dish',
+        ];
+    }
+}
+
 $dropThr = max(0.01, (float) ($cfg['alerts']['drop_pct'] ?? 5) / 100);
 $events = [];
 $open = null;
@@ -155,6 +184,11 @@ while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
 }
 $flush();
 
+if ($dishOutages) {
+    $events = array_values(array_filter($events,
+        fn($e) => $e['kind'] !== 'link_outage'));
+}
+
 foreach ($events as &$e) {
     $e['end'] = $e['last'] + 60;
     $e['duration_s'] = $e['kind'] === 'link_outage' && $e['outage_s'] > 0
@@ -165,8 +199,19 @@ foreach ($events as &$e) {
 }
 unset($e);
 
+foreach ($dishOutages as $o) $events[] = $o;
+usort($events, fn($a, $b) => $a['start'] <=> $b['start']);
+
 $totals = ['dish_unreachable' => 0, 'link_outage' => 0, 'degraded' => 0];
-foreach ($events as $e) $totals[$e['kind']] += $e['duration_s'];
+$byCause = [];
+foreach ($events as $e) {
+    $totals[$e['kind']] += $e['duration_s'];
+    if (!empty($e['cause']))
+        $byCause[$e['cause']] = ($byCause[$e['cause']] ?? 0) + $e['duration_s'];
+}
+foreach ($totals as $k => $v) $totals[$k] = round($v, 1);
+foreach ($byCause as $k => $v) $byCause[$k] = round($v, 1);
+arsort($byCause);
 
 /* Availability and coverage are deliberately separate numbers.
 
@@ -196,9 +241,11 @@ out([
     'has_bytes' => $hasBytes,
     'events'    => array_reverse($events),      // newest first for the list
     'totals'    => $totals,
+    'by_cause'  => $byCause,
+    'cause_source' => $dishOutages ? 'dish' : 'inferred',
     'observed_s'    => $observed,
     'blind_s'       => $blind,
-    'lost_s'        => $lost,
+    'lost_s'        => round($lost, 1),
     'availability'  => $observed > 0
         ? round(100 * max(0, $observed - $lost) / $observed, 4) : null,
     'coverage_pct'  => ($observed + $blind) > 0

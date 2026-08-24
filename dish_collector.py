@@ -71,6 +71,39 @@ def seconds_since_last_row(conn, ts):
     return max(1, min(MAX_SPAN_S, int(ts - prev)))
 
 
+def _f(v):
+    """Float or None — the dish omits fields rather than sending zero."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def store_outages(conn, outages):
+    """Record the dish's own outage log, keyed on its nanosecond start.
+
+    The ring buffer replays the same entries on every poll, so this relies on
+    the primary key to ignore ones already stored rather than tracking state.
+    """
+    rows = []
+    for o in outages:
+        try:
+            start_ns = int(o.get("startTimestampNs") or 0)
+        except (TypeError, ValueError):
+            continue
+        if start_ns <= 0:
+            continue
+        rows.append((start_ns, start_ns // 1_000_000_000,
+                     str(o.get("cause") or "UNKNOWN"),
+                     round(int(o.get("durationNs") or 0) / 1e9, 3),
+                     1 if o.get("didSwitch") else 0))
+    if rows:
+        conn.executemany(
+            "INSERT OR IGNORE INTO outages "
+            "(start_ns, ts, cause, duration_s, did_switch) VALUES (?,?,?,?,?)",
+            rows)
+
+
 def ensure_db(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS dish (
@@ -95,11 +128,34 @@ def ensure_db(conn):
     """)
     # Added after v3.3: integrated traffic for the window this row covers.
     for col, typ in (("bytes_down", "INTEGER"), ("bytes_up", "INTEGER"),
-                     ("sample_s", "INTEGER")):
+                     ("sample_s", "INTEGER"),
+                     # v3.5: power and the status fields the dish already sends
+                     ("power_wh", "REAL"), ("power_w", "REAL"),
+                     ("dish_power_w", "REAL"), ("router_power_w", "REAL"),
+                     ("dl_limit", "TEXT"), ("ul_limit", "TEXT"),
+                     ("cos", "TEXT"), ("heating", "INTEGER"),
+                     ("obstructed_now", "INTEGER"), ("obstr_valid_s", "REAL"),
+                     ("obstr_avg_dur_s", "REAL"), ("obstr_avg_int_s", "REAL"),
+                     ("lat_p50", "REAL"), ("lat_p95", "REAL")):
         try:
             conn.execute(f"ALTER TABLE dish ADD COLUMN {col} {typ}")
         except sqlite3.OperationalError:
             pass
+
+    # The dish keeps its own outage log with a cause and nanosecond timing.
+    # That is authoritative, unlike anything inferred from drop rate, so it
+    # gets its own table. start_ns is unique, which makes re-import a no-op:
+    # the ring buffer reports the same outage on every poll until it ages out.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS outages (
+            start_ns INTEGER PRIMARY KEY,
+            ts INTEGER NOT NULL,
+            cause TEXT,
+            duration_s REAL,
+            did_switch INTEGER
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_outages_ts ON outages(ts)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dish_ts ON dish(ts)")
     conn.commit()
 
@@ -114,7 +170,11 @@ def main():
         "uptime_s", "down_bps", "up_bps", "pop_latency_ms",
         "drop_rate_60s", "outage_s_60s", "fraction_obstructed",
         "gps_sats", "eth_mbps", "tilt", "azim", "elev", "sw", "alerts",
-        "bytes_down", "bytes_up", "sample_s")}
+        "bytes_down", "bytes_up", "sample_s",
+        "power_wh", "power_w", "dish_power_w", "router_power_w",
+        "dl_limit", "ul_limit", "cos", "heating",
+        "obstructed_now", "obstr_valid_s", "obstr_avg_dur_s", "obstr_avg_int_s",
+        "lat_p50", "lat_p95")}
     err = None
 
     try:
@@ -123,8 +183,24 @@ def main():
         row["down_bps"] = float(st.get("downlinkThroughputBps", 0))
         row["up_bps"] = float(st.get("uplinkThroughputBps", 0))
         row["pop_latency_ms"] = round(float(st.get("popPingLatencyMs", 0)), 1)
-        row["fraction_obstructed"] = float(
-            st.get("obstructionStats", {}).get("fractionObstructed", 0))
+        ob = st.get("obstructionStats", {}) or {}
+        row["fraction_obstructed"] = float(ob.get("fractionObstructed", 0))
+        row["obstructed_now"] = 1 if ob.get("currentlyObstructed") else 0
+        row["obstr_valid_s"] = _f(ob.get("validS"))
+        # Only meaningful once the dish says the running average is valid.
+        if ob.get("avgProlongedObstructionValid"):
+            row["obstr_avg_dur_s"] = _f(ob.get("avgProlongedObstructionDurationS"))
+            row["obstr_avg_int_s"] = _f(ob.get("avgProlongedObstructionIntervalS"))
+
+        # Whether the dish is being rate limited, and why. NO_LIMIT is the
+        # normal case; anything else is the dish telling you it is throttled.
+        row["dl_limit"] = st.get("dlBandwidthRestrictedReason") or None
+        row["ul_limit"] = st.get("ulBandwidthRestrictedReason") or None
+        row["cos"] = st.get("classOfService") or None
+
+        ups = st.get("upsuStats", {}) or {}
+        row["dish_power_w"] = _f(ups.get("dishPower"))
+        row["router_power_w"] = _f(ups.get("routerPower"))
         row["gps_sats"] = int(st.get("gpsStats", {}).get("gpsSats", 0))
         row["eth_mbps"] = int(st.get("ethSpeedMbps", 0))
         al = st.get("alignmentStats", {})
@@ -134,6 +210,9 @@ def main():
         row["sw"] = st.get("deviceInfo", {}).get("softwareVersion", "")
         active = [k for k, v in st.get("alerts", {}).items() if v]
         row["alerts"] = json.dumps(active) if active else None
+        # Snow melt draws far more power than idle, so it is worth recording
+        # separately rather than leaving it buried in the alert list.
+        row["heating"] = 1 if st.get("alerts", {}).get("isHeating") else 0
     except Exception as e:
         err = f"status: {type(e).__name__}: {e}"
 
@@ -160,6 +239,26 @@ def main():
                 # one sample per second, bits -> bytes
                 row["bytes_down"] = int(sum(max(0.0, float(v or 0)) for v in dn) / 8)
                 row["bytes_up"] = int(sum(max(0.0, float(v or 0)) for v in up) / 8)
+
+            # power_in is watts sampled once a second, so the sum is
+            # watt-seconds; divide by 3600 for watt-hours.
+            pw = [float(v) for v in ring_tail(hi.get("powerIn", []), cur, span)
+                  if v is not None]
+            if pw:
+                row["power_wh"] = round(sum(pw) / 3600.0, 4)
+                row["power_w"] = round(pw[-1], 1)
+
+            # Per-second latency gives a distribution; the status field only
+            # ever gives one instant, which hides every spike between polls.
+            lat = sorted(float(v) for v in
+                         ring_tail(hi.get("popPingLatencyMs", []), cur, span)
+                         if v is not None and float(v) > 0)
+            if lat:
+                row["lat_p50"] = round(lat[len(lat) // 2], 1)
+                row["lat_p95"] = round(lat[min(len(lat) - 1,
+                                               int(0.95 * len(lat)))], 1)
+
+            store_outages(db, hi.get("outages") or [])
         except Exception:
             pass  # history optional
 
@@ -168,13 +267,23 @@ def main():
            (ts, uptime_s, down_bps, up_bps, pop_latency_ms,
             drop_rate_60s, outage_s_60s, fraction_obstructed,
             gps_sats, eth_mbps, tilt, azim, elev, sw, alerts, error,
-            bytes_down, bytes_up, sample_s)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            bytes_down, bytes_up, sample_s,
+            power_wh, power_w, dish_power_w, router_power_w,
+            dl_limit, ul_limit, cos, heating,
+            obstructed_now, obstr_valid_s, obstr_avg_dur_s, obstr_avg_int_s,
+            lat_p50, lat_p95)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+                   ?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (ts, row["uptime_s"], row["down_bps"], row["up_bps"],
          row["pop_latency_ms"], row["drop_rate_60s"], row["outage_s_60s"],
          row["fraction_obstructed"], row["gps_sats"], row["eth_mbps"],
          row["tilt"], row["azim"], row["elev"], row["sw"], row["alerts"], err,
-         row["bytes_down"], row["bytes_up"], row["sample_s"]),
+         row["bytes_down"], row["bytes_up"], row["sample_s"],
+         row["power_wh"], row["power_w"], row["dish_power_w"],
+         row["router_power_w"], row["dl_limit"], row["ul_limit"],
+         row["cos"], row["heating"], row["obstructed_now"],
+         row["obstr_valid_s"], row["obstr_avg_dur_s"], row["obstr_avg_int_s"],
+         row["lat_p50"], row["lat_p95"]),
     )
     db.commit()
     db.close()
@@ -186,7 +295,10 @@ def main():
           f"{round((row['up_bps'] or 0)/1e6,2)}^ Mbps | pop {row['pop_latency_ms']} ms | "
           f"drop60 {row['drop_rate_60s']} | obstr {round((row['fraction_obstructed'] or 0)*100,3)}%"
           + (f" | used {round(((row['bytes_down'] or 0)+(row['bytes_up'] or 0))/1e6,1)} MB"
-             f"/{row['sample_s']}s" if row["sample_s"] else ""))
+             f"/{row['sample_s']}s" if row["sample_s"] else "")
+          + (f" | {row['power_w']} W" if row["power_w"] else "")
+          + (f" | LIMITED {row['dl_limit']}"
+             if row["dl_limit"] and row["dl_limit"] != "NO_LIMIT" else ""))
 
 
 if __name__ == "__main__":

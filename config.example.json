@@ -43,6 +43,10 @@
         "cycle_day": 1,
         "cap_gb": 0
     },
+    "energy": {
+        "price_per_kwh": 0,
+        "currency": "EUR"
+    },
     "telegram": {
         "token": "",
         "chat_id": ""

@@ -56,6 +56,10 @@ function default_config(): array {
         'retention' => [
             'days' => 0,
         ],
+        'energy' => [
+            'price_per_kwh' => 0,   // 0 hides the cost panel
+            'currency'      => 'EUR',
+        ],
         'usage' => [
             'cycle_day' => 1,     // day of month the billing cycle restarts
             'cap_gb'    => 0,     // 0 = no cap, only informational either way
@@ -365,6 +369,16 @@ case 'save_config': {
             if (count($targets) >= 8) break;
         }
         if ($targets) $c['icmp']['targets'] = $targets;
+    }
+
+    if (isset($n['energy']) && is_array($n['energy'])) {
+        $c['energy']['price_per_kwh'] = max(0, min(100,
+            (float) ($n['energy']['price_per_kwh'] ?? 0)));
+        // Currency is only ever printed, so strip anything that is not a
+        // letter, a currency sign or a separator.
+        $cu = preg_replace('/[^\p{L}\p{Sc}. ]/u', '',
+                           (string) ($n['energy']['currency'] ?? 'EUR'));
+        $c['energy']['currency'] = substr(trim($cu), 0, 8);
     }
 
     if (isset($n['usage']) && is_array($n['usage'])) {

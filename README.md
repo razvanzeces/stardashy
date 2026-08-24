@@ -136,6 +136,8 @@ Everything lives in `data/config.json` and is editable from the **Settings** tab
 | `location.publish_precision` | 2 | decimals of your position exposed in the public `sky.json` (2 ≈ 1 km) |
 | `dish.target` | `192.168.100.1:9200` | dish gRPC endpoint |
 | `retention.days` | 0 | prune DB rows older than N days (0 = keep forever; ~165 MB/year at default cadence) |
+| `energy.price_per_kwh` | 0 | your electricity price; 0 hides the cost panel |
+| `energy.currency` | EUR | label shown next to costs |
 | `usage.cycle_day` | 1 | day of month the billing cycle restarts |
 | `usage.cap_gb` | 0 | monthly cap for the progress bar (0 hides it) |
 | `icmp.interval_s` | 30 | seconds between ICMP probe runs |

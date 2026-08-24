@@ -215,9 +215,18 @@ if ($hasDish) {
             'obstr_pct' => $r['fo'] !== null ? round($r['fo'] * 100, 3) : null,
         ];
     }
+    $dcols = [];
+    $ci = $db->query("PRAGMA table_info(dish)");
+    while ($c = $ci->fetchArray(SQLITE3_ASSOC)) $dcols[$c['name']] = true;
+    // Columns added in later versions may not exist on an older database yet.
+    $extra = array_values(array_filter(
+        ['dl_limit', 'ul_limit', 'cos', 'obstructed_now',
+         'obstr_avg_dur_s', 'obstr_avg_int_s', 'lat_p50', 'lat_p95', 'power_w'],
+        fn($c) => isset($dcols[$c])));
     $dlatest = $db->querySingle(
-        'SELECT ts, uptime_s, sw, alerts, gps_sats, eth_mbps, tilt, azim, elev
-         FROM dish WHERE error IS NULL ORDER BY ts DESC LIMIT 1', true) ?: null;
+        'SELECT ts, uptime_s, sw, alerts, gps_sats, eth_mbps, tilt, azim, elev'
+        . ($extra ? ', ' . implode(', ', $extra) : '') .
+        ' FROM dish WHERE error IS NULL ORDER BY ts DESC LIMIT 1', true) ?: null;
     $outageTotal = 0;
     foreach ($drows as $r) { $outageTotal += $r['outage_s'] ?? 0; }
     $dish = [
