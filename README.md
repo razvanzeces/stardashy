@@ -21,13 +21,26 @@ Speed tests · dish telemetry · live satellite tracking · Telegram alerts — 
 
 | Module | What you get |
 |---|---|
-| **Speed tests** | Cloudflare-based download/upload/latency/jitter, loaded latency (bufferbloat grade), ICMP ping & loss — pure Python stdlib, no speedtest CLI needed |
-| **ICMP health monitor** — continuously pings a set of anycast resolvers (Cloudflare, Google, Quad9, OpenDNS, AdGuard, Lumen) and shows each one as a live tile with current RTT, a colour-coded history strip, packet loss and reachability. Two Starlink-specific targets are offered too — the dish itself (`192.168.100.1`) and the CGNAT gateway (`100.64.0.1`) — which lets you tell "my link to the PoP is bad" apart from "the internet beyond it is bad". Green/amber/red thresholds, probe interval and targets are all set in Settings.
+| **Speed tests** | Cloudflare-based download/upload/latency/jitter with a bufferbloat grade, plus ICMP ping and loss. Pure Python stdlib, no speedtest CLI. A result that looks broken is retried, and a failure is logged as a failure rather than averaged in as 0 Mbps |
+| **Dish telemetry** | Throughput, PoP latency, drop rate, obstruction, GPS, alignment, hardware alerts and per-second latency percentiles — from the dish gRPC API every minute |
+| **⚡ Energy** | The dish reports input power once a second, so this integrates it into real kWh: drawing now, today, this month, projected, per-day and per-year, and the running cost at your own electricity price. Idle draw is a percentile rather than a minimum, and snow-melt periods are tracked separately because they dominate consumption. **The number that matters if you run off solar or a battery** |
+| **Data usage** | Actual bytes moved, summed from the dish's per-second throughput buffer — not a rate sampled once a minute and multiplied. Billing cycle, projection, optional cap, daily breakdown, and how much of it was Stardashy's own speed tests |
+| **Outage timeline** | Every interruption as a scannable band with an incident table. Causes come from the dish's own log — `Obstructed`, `No satellites`, `Thermal shutdown` — and are grouped by whose problem they are. Availability is measured over observed time only and shown next to that coverage, so a monitoring gap is never counted as an outage |
+| **ICMP health** | Continuous reachability tiles for anycast resolvers (Cloudflare, Google, Quad9, OpenDNS, AdGuard, Lumen) with live RTT, a colour-coded history strip and loss. Two Starlink-specific targets are offered — the dish and the CGNAT gateway — which separates "my link to the PoP is bad" from "the internet beyond it is bad" |
+| **Throttling** | The dish publishes whether it is being rate limited and why (`POLICY_LIMIT`, `OVERAGE_LIMIT`, `LOW_SPEED_POLICY_LIMIT`). A header badge appears when it is — no more inferring deprioritisation from the shape of a graph |
+| **Satellite tracker** | The dish API does not name the satellite serving you, so Stardashy **infers it**: it propagates the public CelesTrak TLE set with SGP4 and matches candidates against the dish boresight. Live sky view and world map. It is a well-informed guess, not ground truth |
+| **Test edge** | A labelled chip names the Cloudflare datacentre your speed tests terminate at, with its flag, city and distance from your dish. 216 edge locations are mapped. Deliberately not called "PoP" — the Starlink PoP is a different hop and owns that word on the Dish tab |
+| **Telegram alerts** | Test failures, dish offline and recovery, hardware alerts, high drop rate, WAN IP changes — with a delivery queue so alerts survive a Telegram outage |
+| **Updates** | The dashboard checks GitHub for new releases and installs them itself. The web server never writes program files: it queues a request that a root-owned systemd unit applies |
+| **Dashboard** | Single-page PHP + Chart.js UI: dashboard, dish live view, energy, satellite maps, test log, outage timeline, WAN IP history, network debug tools (ping / MTR / DNS / HTTP), settings |
 
-**Dish telemetry** | Throughput, PoP latency, drop rate, obstruction %, GPS, alignment, hardware alerts — straight from the dish gRPC API every minute |
-| **Satellite tracker** | The dish API doesn't tell you which satellite serves you, so cfspeed **infers it**: it propagates the public CelesTrak TLE set with SGP4 and matches satellites against the dish boresight. Live sky view + world map in the browser |
-| **Telegram alerts** | Test failures, dish offline/recovery, hardware alerts, high drop rate, WAN IP changes — with a delivery queue so alerts survive Telegram outages |
-| **Dashboard** | Single-page PHP + Chart.js UI: dashboard, dish live view (2 s), satellite maps, test log, WAN IP history, network debug tools (ping/MTR/DNS/HTTP), settings |
+### Small things
+
+- The tab title carries the current down/up figures and the favicon turns amber on packet loss, red when the link is down — a background tab is still a status light.
+- The three headline metrics show the change since the previous test, coloured by whether that direction is good.
+- "Last test" counts up in real time, so a stalled collector is obvious.
+- Keys `1`–`8` jump between views (ignored while typing in a field).
+- JS libraries are vendored locally with a CDN fallback, so the dashboard still loads when your link is down.
 
 ## Architecture
 
@@ -154,7 +167,7 @@ Everything lives in `data/config.json` and is editable from the **Settings** tab
 
 ## FAQ
 
-**Which satellite am I connected to?** Nobody outside SpaceX knows for sure — the dish switches every ~15 s and the API doesn't expose it. cfspeed shows the *best candidate*: the satellite closest to the dish's boresight among those above the 25° elevation mask, refreshed every minute. It's a well-informed guess, not ground truth.
+**Which satellite am I connected to?** Nobody outside SpaceX knows for sure — the dish switches every ~15 s and the API doesn't expose it. Stardashy shows the *best candidate*: the satellite closest to the dish's boresight among those above the 25° elevation mask, refreshed every minute. It's a well-informed guess, not ground truth.
 
 **Why Cloudflare and not Ookla?** No CLI dependency, no GDPR popups, stable HTTP endpoints (`speed.cloudflare.com`), and edge timing headers that let us subtract server processing time from latency samples.
 
