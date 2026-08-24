@@ -15,6 +15,7 @@ systemctl daemon-reload
 
 if [ "${1:-}" = "--purge" ]; then
   rm -rf "$DEST"
+  userdel cfspeed 2>/dev/null || true
   echo "removed $DEST"
 else
   echo "units removed; data kept in $DEST (use --purge to delete)"
