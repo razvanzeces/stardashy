@@ -330,10 +330,10 @@ case 'get_config':
 case 'save_config': {
     require_auth();
     /* Dish endpoints are deliberately not writable from here.
-       A dish entry can carry an "exec" prefix that the collectors run as
-       root, so accepting one over HTTP would turn the dashboard password
-       into a root shell. Endpoints are edited in data/config.json by
-       someone who already has root on the box. */
+       A dish entry can carry an "exec" prefix that the collectors execute
+       (as the sandboxed, unprivileged cfspeed user), so accepting one over
+       HTTP would still turn the dashboard password into command execution.
+       Endpoints are edited in data/config.json by an admin on the box. */
     $c = load_config();
     $n = $in['config'] ?? [];
     $iv = $n['intervals'] ?? [];

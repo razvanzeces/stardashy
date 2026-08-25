@@ -15,6 +15,7 @@ FORBIDDEN = [
     "${s.name}",
     "${hit.s.name}",
     "${r.values.join",
+    "${d.name",
 ]
 
 src = open(PATH, encoding="utf-8").read()

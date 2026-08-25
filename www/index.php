@@ -3041,7 +3041,7 @@ function renderDishSel(list){
   if (!same || el.dataset.n !== String(list.length)){
     el.dataset.n = String(list.length);
     el.innerHTML = '<span class="lbl">Dish</span>' + list.map(d =>
-      `<button data-dish="${d.id}">${d.name || d.id}</button>`).join('');
+      `<button data-dish="${d.id}">${esc(d.name || d.id)}</button>`).join('');
     el.querySelectorAll('button').forEach(b =>
       b.addEventListener('click', () => {
         if (b.dataset.dish === DISH) return;
