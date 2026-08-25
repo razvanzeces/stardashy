@@ -319,6 +319,11 @@ case 'get_config':
 
 case 'save_config': {
     require_auth();
+    /* Dish endpoints are deliberately not writable from here.
+       A dish entry can carry an "exec" prefix that the collectors run as
+       root, so accepting one over HTTP would turn the dashboard password
+       into a root shell. Endpoints are edited in data/config.json by
+       someone who already has root on the box. */
     $c = load_config();
     $n = $in['config'] ?? [];
     $iv = $n['intervals'] ?? [];
@@ -386,6 +391,8 @@ case 'save_config': {
         $c['usage']['cap_gb']    = max(0, min(100000, (float) ($n['usage']['cap_gb'] ?? 0)));
     }
 
+    // Preserve, never accept: whatever is on disk for dishes stays as-is.
+    unset($c['__reject']);
     $tmp = CONFIG . '.tmp';
     if (@file_put_contents($tmp, json_encode($c, JSON_PRETTY_PRINT)) === false)
         fail('cannot write config (permissions on data/)', 500);

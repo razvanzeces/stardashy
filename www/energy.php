@@ -39,8 +39,13 @@ while ($c = $r->fetchArray(SQLITE3_ASSOC)) if ($c['name'] === 'power_wh') $has =
 if (!$has) out(['supported' => false]);
 
 // Does this firmware actually report power, or is the column just empty?
+require_once __DIR__ . '/dishlib.php';
+$dishList = cfspeed_dishes($cfg);
+$dishId   = cfspeed_pick_dish($dishList, $_GET['dish'] ?? null);
+$dw = cfspeed_dish_where('', $dishId, cfspeed_has_dish_col($db, 'dish'));
+
 $anyPower = (int) ($db->querySingle(
-    "SELECT COUNT(*) FROM dish WHERE power_wh IS NOT NULL") ?: 0);
+    "SELECT COUNT(*) FROM dish WHERE power_wh IS NOT NULL" . $dw) ?: 0);
 if ($anyPower === 0) out(['supported' => false, 'waiting' => true]);
 
 $ranges = ['24h' => 86400, '7d' => 7 * 86400, '30d' => 30 * 86400, '90d' => 90 * 86400];
@@ -52,7 +57,7 @@ $since  = $now - $span;
 /* ---- latest sample ---- */
 $latest = $db->querySingle(
     "SELECT ts, power_w, dish_power_w, router_power_w, heating
-     FROM dish WHERE power_w IS NOT NULL AND error IS NULL
+     FROM dish WHERE power_w IS NOT NULL AND error IS NULL" . $dw . "
      ORDER BY ts DESC LIMIT 1", true) ?: null;
 
 /* ---- totals over fixed windows ---- */
@@ -83,7 +88,7 @@ $q = $db->prepare(
             AVG(power_w) w, MAX(power_w) wmax, SUM(power_wh) wh,
             MAX(heating) heat
      FROM dish
-     WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL
+     WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL" . $dw . "
      GROUP BY tb ORDER BY tb");
 $q->bindValue(':b', $bucket, SQLITE3_INTEGER);
 $q->bindValue(':s', $since, SQLITE3_INTEGER);
@@ -102,7 +107,7 @@ $q = $db->prepare(
     "SELECT date(ts,'unixepoch','localtime') d, SUM(power_wh) wh,
             AVG(power_w) w, MAX(power_w) wmax,
             SUM(CASE WHEN heating=1 THEN 60 ELSE 0 END) heat_s
-     FROM dish WHERE ts >= :s AND error IS NULL
+     FROM dish WHERE ts >= :s AND error IS NULL" . $dw . "
      GROUP BY d ORDER BY d");
 $q->bindValue(':s', $since, SQLITE3_INTEGER);
 $res = $q->execute();
@@ -119,7 +124,7 @@ $st = $db->prepare(
     "SELECT MIN(power_w) mn, AVG(power_w) av, MAX(power_w) mx,
             SUM(power_wh) total, COUNT(*) n,
             SUM(CASE WHEN heating=1 THEN 1 ELSE 0 END) heat_min
-     FROM dish WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL");
+     FROM dish WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL" . $dw);
 $st->bindValue(':s', $since, SQLITE3_INTEGER);
 $s = $st->execute()->fetchArray(SQLITE3_ASSOC) ?: [];
 
@@ -132,7 +137,7 @@ $iq = $db->prepare(
      WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL
      ORDER BY power_w LIMIT 1 OFFSET
        (SELECT COUNT(*)/20 FROM dish
-        WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL)");
+        WHERE ts >= :s AND error IS NULL AND power_w IS NOT NULL" . $dw . ")");
 $iq->bindValue(':s', $since, SQLITE3_INTEGER);
 $ir = $iq->execute()->fetchArray(SQLITE3_ASSOC);
 if ($ir) $idle = round((float) $ir['power_w'], 1);
@@ -143,7 +148,7 @@ if ($ir) $idle = round((float) $ir['power_w'], 1);
    propagates into a badly wrong per-year number. */
 $cov = $db->prepare(
     "SELECT SUM(COALESCE(sample_s, 60)) c, SUM(power_wh) w
-     FROM dish WHERE ts >= :s AND error IS NULL AND power_wh IS NOT NULL");
+     FROM dish WHERE ts >= :s AND error IS NULL AND power_wh IS NOT NULL" . $dw);
 $cov->bindValue(':s', $since, SQLITE3_INTEGER);
 $cv = $cov->execute()->fetchArray(SQLITE3_ASSOC) ?: [];
 $coveredS = max(1, (int) ($cv['c'] ?? 0));
@@ -152,6 +157,8 @@ $avgDayWh = (float) ($cv['w'] ?? 0) / $coveredS * 86400;
 out([
     'supported' => true,
     'range'     => $range,
+    'dishes'    => $dishList,
+    'dish_id'   => $dishId,
     'now'       => $now,
     'bucket'    => $bucket,
     'price'     => $price ?: null,

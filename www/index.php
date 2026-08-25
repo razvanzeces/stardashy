@@ -280,6 +280,25 @@ select option{background:#0a0a0a}
 .evkind.blind{border-color:var(--text3);color:var(--text3)}
 .evkind.deg{border-color:var(--warn);color:var(--warn)}
 
+/* ---- dish selector ---- */
+/* Hidden entirely with one dish, which is the overwhelmingly common case —
+   a chooser with a single option is just clutter. */
+.dishsel{display:none;align-items:stretch;border:1px solid var(--line);
+  border-radius:2px;overflow:hidden;line-height:1}
+.dishsel.on{display:inline-flex}
+.dishsel .lbl{display:flex;align-items:center;padding:0 9px;
+  background:rgba(255,255,255,.05);border-right:1px solid var(--line);
+  font-size:9px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text3);white-space:nowrap}
+.dishsel button{
+  appearance:none;background:transparent;border:0;border-right:1px solid var(--line-soft);
+  color:var(--text3);font:inherit;font-size:10px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;padding:7px 13px;cursor:pointer;white-space:nowrap;
+  transition:color .15s ease,background .15s ease}
+.dishsel button:last-child{border-right:0}
+.dishsel button:hover{color:var(--text2)}
+.dishsel button.active{color:var(--text);background:rgba(255,255,255,.08)}
+
 /* ---- test edge chip ---- */
 /* Labelled, because "SOFIA · SOF · 438 KM" on its own means nothing to
    anyone who does not already know what a Cloudflare colo code is. */
@@ -602,6 +621,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
       <span class="brand-sub">Monitoring</span>
     </div>
     <div class="hstatus">
+      <span class="dishsel" id="dishSel"><span class="lbl">Dish</span></span>
       <span class="popbox" id="popItem">
         <span class="lbl">Test Edge</span>
         <span class="val">
@@ -2749,9 +2769,11 @@ function renderEnergy(d){
 
 async function loadEnergy(){
   try{
-    const res = await fetch('energy.php?range=' + (range === '3h' ? '24h' : range),
+    const res = await fetch(withDish('energy.php?range=' + (range === '3h' ? '24h' : range)),
                             {cache:'no-store'});
-    renderEnergy(await res.json());
+    const d = await res.json();
+    if (d.dishes) renderDishSel(d.dishes);
+    renderEnergy(d);
   }catch(e){}
 }
 
@@ -2984,14 +3006,58 @@ $('tlCanvas')?.addEventListener('mousemove', ev => {
 
 async function loadUsage(){
   try{
-    const res = await fetch('usage.php?range=' + (range === '3h' ? '24h' : range),
+    const res = await fetch(withDish('usage.php?range=' + (range === '3h' ? '24h' : range)),
                             {cache:'no-store'});
     const d = await res.json();
+    if (d.dishes) renderDishSel(d.dishes);
     if (d.error) return;
     renderUsage(d.usage);
     renderTimeline(d);
   }catch(e){}
 }
+
+/* ================= dish selection ================= */
+/* Every Starlink dish answers on the same fixed address, so telling two apart
+   is a networking problem solved outside this program. What the UI does is
+   keep each dish's data separate: every dish-derived endpoint is asked for one
+   dish at a time, because averaging two links together would produce numbers
+   that describe neither. */
+let DISH = localStorage.getItem('dishId') || null;
+let DISH_LIST = [];
+
+function renderDishSel(list){
+  if (!Array.isArray(list) || !list.length) return;
+  const same = list.length === DISH_LIST.length
+    && list.every((d, i) => d.id === DISH_LIST[i]?.id);
+  DISH_LIST = list;
+  if (!DISH || !list.some(d => d.id === DISH)) DISH = list[0].id;
+
+  const el = $('dishSel');
+  if (!el) return;
+  el.classList.toggle('on', list.length > 1);
+  if (list.length < 2) return;
+
+  if (!same || el.dataset.n !== String(list.length)){
+    el.dataset.n = String(list.length);
+    el.innerHTML = '<span class="lbl">Dish</span>' + list.map(d =>
+      `<button data-dish="${d.id}">${d.name || d.id}</button>`).join('');
+    el.querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => {
+        if (b.dataset.dish === DISH) return;
+        DISH = b.dataset.dish;
+        localStorage.setItem('dishId', DISH);
+        renderDishSel(DISH_LIST);
+        load();
+        loadUsage();
+        if (activeView === 'energy') loadEnergy();
+      }));
+  }
+  el.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.dish === DISH));
+}
+
+/** Append the selected dish to an endpoint query. */
+const withDish = url => DISH ? url + (url.includes('?') ? '&' : '?') + 'dish=' + encodeURIComponent(DISH) : url;
 
 /* ================= tab title and favicon ================= */
 /* A monitoring dashboard is usually left open in a background tab, so the
@@ -3376,8 +3442,9 @@ setTimeout(hideSplash, 6000);   // never trap the user on the splash
 /* ================= data load ================= */
 async function load(){
   try{
-    const res = await fetch('api.php?range=' + range, {cache:'no-store'});
+    const res = await fetch(withDish('api.php?range=' + range), {cache:'no-store'});
     const data = await res.json();
+    if (data.dishes) renderDishSel(data.dishes);
     if (data.error){ $('lastRun').textContent = data.error; return; }
     if (data.cfg?.live_poll_s) LIVE_MS = data.cfg.live_poll_s * 1000;
     render(data);

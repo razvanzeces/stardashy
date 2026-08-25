@@ -6,6 +6,7 @@ Paths are relative to this script's directory (override with CFSPEED_HOME).
 The dish endpoint and grpcurl binary can be overridden in data/config.json:
   "dish": {"target": "192.168.100.1:9200", "grpcurl": "/usr/local/bin/grpcurl"}
 """
+import dishes
 import json
 import shutil
 import sqlite3
@@ -19,28 +20,34 @@ DATA_DIR = os.path.join(BASE, "data")
 DB_PATH = os.path.join(DATA_DIR, "speed.db")
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
-TARGET = "192.168.100.1:9200"
-GRPCURL = None
 METHOD = "SpaceX.API.Device.Device/Handle"
-
-try:
-    with open(CONFIG_PATH) as _f:
-        _d = json.load(_f).get("dish", {})
-    TARGET = _d.get("target") or TARGET
-    GRPCURL = _d.get("grpcurl") or None
-except Exception:
-    pass
-GRPCURL = GRPCURL or shutil.which("grpcurl") or "/usr/local/bin/grpcurl"
+DEFAULT_ID = dishes.DEFAULT_ID
 
 
-def grpc(payload: str):
-    out = subprocess.run(
-        [GRPCURL, "-plaintext", "-max-time", "10", "-d", payload, TARGET, METHOD],
-        capture_output=True, text=True, timeout=15,
-    )
-    if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip()[:200] or "grpcurl failed")
-    return json.loads(out.stdout)
+def grpc_for(dish):
+    """Build a gRPC caller bound to one dish.
+
+    Every dish answers on the same firmware-fixed address, so telling two of
+    them apart is a networking job, not a code one. What this supports is
+    whatever the operator did about it: a distinct address (DNAT, VLAN) via
+    `target`, or a command prefix via `exec` for a namespace, a container or
+    a remote host. The prefix is argv, never a shell string.
+    """
+    binary = dish.get("grpcurl") or shutil.which("grpcurl") or "/usr/local/bin/grpcurl"
+    prefix = list(dish.get("exec") or [])
+    # A remote hop needs longer than a switch on the same LAN.
+    timeout = 25 if prefix else 15
+
+    def call(payload: str):
+        argv = prefix + [binary, "-plaintext", "-max-time", "10",
+                         "-d", payload, dish["target"], METHOD]
+        out = subprocess.run(argv, capture_output=True, text=True,
+                             timeout=timeout)
+        if out.returncode != 0:
+            raise RuntimeError(out.stderr.strip()[:200] or "grpcurl failed")
+        return json.loads(out.stdout)
+
+    return call
 
 
 def ring_tail(arr, current, n):
@@ -59,11 +66,17 @@ def ring_tail(arr, current, n):
 MAX_SPAN_S = 900
 
 
-def seconds_since_last_row(conn, ts):
-    """How many seconds of history this run should account for."""
+def seconds_since_last_row(conn, ts, dish_id):
+    """How many seconds of history this run should account for, per dish.
+
+    Rows written before multi-dish support have a NULL dish_id; they belong to
+    the default dish, so they still count for it.
+    """
     try:
         prev = conn.execute(
-            "SELECT MAX(ts) FROM dish WHERE ts < ?", (ts,)).fetchone()[0]
+            "SELECT MAX(ts) FROM dish WHERE ts < ? AND "
+            "(dish_id = ? OR (dish_id IS NULL AND ? = ?))",
+            (ts, dish_id, dish_id, DEFAULT_ID)).fetchone()[0]
     except sqlite3.OperationalError:
         prev = None
     if not prev:
@@ -79,7 +92,7 @@ def _f(v):
         return None
 
 
-def store_outages(conn, outages):
+def store_outages(conn, outages, dish_id):
     """Record the dish's own outage log, keyed on its nanosecond start.
 
     The ring buffer replays the same entries on every poll, so this relies on
@@ -96,12 +109,12 @@ def store_outages(conn, outages):
         rows.append((start_ns, start_ns // 1_000_000_000,
                      str(o.get("cause") or "UNKNOWN"),
                      round(int(o.get("durationNs") or 0) / 1e9, 3),
-                     1 if o.get("didSwitch") else 0))
+                     1 if o.get("didSwitch") else 0, dish_id))
     if rows:
         conn.executemany(
             "INSERT OR IGNORE INTO outages "
-            "(start_ns, ts, cause, duration_s, did_switch) VALUES (?,?,?,?,?)",
-            rows)
+            "(start_ns, ts, cause, duration_s, did_switch, dish_id) "
+            "VALUES (?,?,?,?,?,?)", rows)
 
 
 def ensure_db(conn):
@@ -136,7 +149,9 @@ def ensure_db(conn):
                      ("cos", "TEXT"), ("heating", "INTEGER"),
                      ("obstructed_now", "INTEGER"), ("obstr_valid_s", "REAL"),
                      ("obstr_avg_dur_s", "REAL"), ("obstr_avg_int_s", "REAL"),
-                     ("lat_p50", "REAL"), ("lat_p95", "REAL")):
+                     ("lat_p50", "REAL"), ("lat_p95", "REAL"),
+                     # v3.6: which dish this row came from
+                     ("dish_id", "TEXT")):
         try:
             conn.execute(f"ALTER TABLE dish ADD COLUMN {col} {typ}")
         except sqlite3.OperationalError:
@@ -155,17 +170,24 @@ def ensure_db(conn):
             did_switch INTEGER
         )
     """)
+    try:
+        conn.execute("ALTER TABLE outages ADD COLUMN dish_id TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_outages_ts ON outages(ts)")
+    # Two dishes can report outages at the same nanosecond, so uniqueness is
+    # per dish. The original table keyed on start_ns alone; this index adds
+    # the pairing without rewriting it.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_outages_dish_start "
+                 "ON outages(dish_id, start_ns)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dish_ts ON dish(ts)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dish_id_ts ON dish(dish_id, ts)")
     conn.commit()
 
 
-def main():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    db = sqlite3.connect(DB_PATH)
-    ensure_db(db)
-
-    ts = int(time.time())
+def poll(db, dish, ts):
+    """Poll one dish and store a row for it. Returns (summary, ok)."""
+    grpc = grpc_for(dish)
     row = {k: None for k in (
         "uptime_s", "down_bps", "up_bps", "pop_latency_ms",
         "drop_rate_60s", "outage_s_60s", "fraction_obstructed",
@@ -230,7 +252,7 @@ def main():
             # instantaneous rates into an actual byte count, which is the only
             # way to get real usage: sampling the rate once a minute would miss
             # everything between samples.
-            span = seconds_since_last_row(db, ts)
+            span = seconds_since_last_row(db, ts, dish["id"])
             dn = ring_tail(hi.get("downlinkThroughputBps", []), cur, span)
             up = ring_tail(hi.get("uplinkThroughputBps", []), cur, span)
             if dn or up:
@@ -258,7 +280,7 @@ def main():
                 row["lat_p95"] = round(lat[min(len(lat) - 1,
                                                int(0.95 * len(lat)))], 1)
 
-            store_outages(db, hi.get("outages") or [])
+            store_outages(db, hi.get("outages") or [], dish["id"])
         except Exception:
             pass  # history optional
 
@@ -271,9 +293,9 @@ def main():
             power_wh, power_w, dish_power_w, router_power_w,
             dl_limit, ul_limit, cos, heating,
             obstructed_now, obstr_valid_s, obstr_avg_dur_s, obstr_avg_int_s,
-            lat_p50, lat_p95)
+            lat_p50, lat_p95, dish_id)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-                   ?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (ts, row["uptime_s"], row["down_bps"], row["up_bps"],
          row["pop_latency_ms"], row["drop_rate_60s"], row["outage_s_60s"],
          row["fraction_obstructed"], row["gps_sats"], row["eth_mbps"],
@@ -283,22 +305,51 @@ def main():
          row["router_power_w"], row["dl_limit"], row["ul_limit"],
          row["cos"], row["heating"], row["obstructed_now"],
          row["obstr_valid_s"], row["obstr_avg_dur_s"], row["obstr_avg_int_s"],
-         row["lat_p50"], row["lat_p95"]),
+         row["lat_p50"], row["lat_p95"], dish["id"]),
     )
     db.commit()
-    db.close()
 
     if err:
-        print(f"cfspeed-dish: FAILED — {err}", file=sys.stderr)
+        return f"{dish['id']}: FAILED — {err}", False
+    return (f"{dish['id']}: {round((row['down_bps'] or 0)/1e6,1)}v / "
+            f"{round((row['up_bps'] or 0)/1e6,2)}^ Mbps | pop {row['pop_latency_ms']} ms | "
+            f"drop60 {row['drop_rate_60s']} | obstr {round((row['fraction_obstructed'] or 0)*100,3)}%"
+            + (f" | used {round(((row['bytes_down'] or 0)+(row['bytes_up'] or 0))/1e6,1)} MB"
+               f"/{row['sample_s']}s" if row["sample_s"] else "")
+            + (f" | {row['power_w']} W" if row["power_w"] else "")
+            + (f" | LIMITED {row['dl_limit']}"
+               if row["dl_limit"] and row["dl_limit"] != "NO_LIMIT" else ""), True)
+
+
+def main():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    db = sqlite3.connect(DB_PATH, timeout=20)
+    ensure_db(db)
+
+    targets = dishes.resolve(dishes.load_config(CONFIG_PATH))
+    ts = int(time.time())
+
+    # One unreachable dish must not stop the others being recorded, so each is
+    # polled and committed independently; the exit code only reports failure
+    # when every dish failed.
+    lines, ok_any = [], False
+    for d in targets:
+        try:
+            line, ok = poll(db, d, ts)
+        except Exception as e:
+            line, ok = f"{d['id']}: FAILED — {type(e).__name__}: {e}", False
+        lines.append((line, ok))
+        ok_any = ok_any or ok
+    db.close()
+
+    single = len(targets) == 1
+    for line, ok in lines:
+        if single and ": " in line:
+            line = line.split(": ", 1)[1]
+        out = "cfspeed-dish: " + line
+        print(out, file=sys.stderr if not ok else sys.stdout)
+    if not ok_any:
         sys.exit(1)
-    print(f"cfspeed-dish: {round((row['down_bps'] or 0)/1e6,1)}v / "
-          f"{round((row['up_bps'] or 0)/1e6,2)}^ Mbps | pop {row['pop_latency_ms']} ms | "
-          f"drop60 {row['drop_rate_60s']} | obstr {round((row['fraction_obstructed'] or 0)*100,3)}%"
-          + (f" | used {round(((row['bytes_down'] or 0)+(row['bytes_up'] or 0))/1e6,1)} MB"
-             f"/{row['sample_s']}s" if row["sample_s"] else "")
-          + (f" | {row['power_w']} W" if row["power_w"] else "")
-          + (f" | LIMITED {row['dl_limit']}"
-             if row["dl_limit"] and row["dl_limit"] != "NO_LIMIT" else ""))
 
 
 if __name__ == "__main__":

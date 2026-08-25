@@ -39,7 +39,7 @@ if [ "$SRC" = "$DEST" ]; then
 else
   say "installing to ${DEST}"
   mkdir -p "$DEST"
-  for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py icmp_collector.py; do
+  for f in collector.py dish_collector.py sat_tracker.py alerter.py apply_config.py update.py icmp_collector.py dishes.py; do
     install -m 0755 "$SRC/$f" "$DEST/$f"
   done
   install -m 0644 "$SRC/VERSION" "$DEST/VERSION"

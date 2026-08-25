@@ -9,6 +9,14 @@
         "target": "192.168.100.1:9200",
         "grpcurl": ""
     },
+    "_dishes_comment": "Optional. Omit for a single dish. Every dish answers on the same fixed address, so separate them at the network level (DNAT, VLAN, netns) and give each a distinct target \u2014 or set 'exec' to a command prefix such as 'ssh pi@cabin' or 'ip netns exec dish-b'. 'exec' is file-only and is never writable from the dashboard, because the collectors run as root.",
+    "dishes": [
+        {
+            "id": "home",
+            "name": "Home",
+            "target": "192.168.100.1:9200"
+        }
+    ],
     "intervals": {
         "speedtest_min": 30,
         "dish_s": 60,

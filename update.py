@@ -40,7 +40,8 @@ SAFE_REF = lambda r: bool(r) and (
     r == "main" or all(c.isalnum() or c in ".-_" for c in r)) and len(r) <= 64
 
 INSTALLED_FILES = ["collector.py", "dish_collector.py", "sat_tracker.py",
-                   "alerter.py", "apply_config.py", "update.py", "icmp_collector.py", "VERSION",
+                   "alerter.py", "apply_config.py", "update.py", "icmp_collector.py",
+                   "dishes.py", "VERSION",
                    "install.sh", "uninstall.sh"]
 
 

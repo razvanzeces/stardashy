@@ -3,7 +3,8 @@
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
-define('CFSPEED_DATA', dirname(__DIR__) . '/data');
+define('CFSPEED_BASE', dirname(__DIR__));
+define('CFSPEED_DATA', CFSPEED_BASE . '/data');
 
 $ranges = [
     '3h'  => 3 * 3600,
@@ -17,6 +18,13 @@ $buckets = [
     '7d'  => 1800,
     '30d' => 7200,
 ];
+
+require_once __DIR__ . '/dishlib.php';
+$cfgPath  = CFSPEED_BASE . '/data/config.json';
+$cfgAll   = is_file($cfgPath)
+    ? (json_decode((string) file_get_contents($cfgPath), true) ?: []) : [];
+$dishList = cfspeed_dishes($cfgAll);
+$dishId   = cfspeed_pick_dish($dishList, $_GET['dish'] ?? null);
 
 $range = $_GET['range'] ?? '24h';
 $seconds = $ranges[$range] ?? $ranges['24h'];
@@ -188,6 +196,7 @@ $dish = null;
 $hasDish = $db->querySingle(
     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='dish'");
 if ($hasDish) {
+    $dw = cfspeed_dish_where('', $dishId, cfspeed_has_dish_col($db, 'dish'));
     $dstmt = $db->prepare(
         'SELECT (ts / :b) * :b AS tb,
                 AVG(down_bps) AS down_bps,
@@ -197,7 +206,7 @@ if ($hasDish) {
                 SUM(outage_s_60s) AS outage_s,
                 AVG(fraction_obstructed) AS fo
          FROM dish
-         WHERE ts >= :since AND error IS NULL
+         WHERE ts >= :since AND error IS NULL' . $dw . '
          GROUP BY tb ORDER BY tb ASC'
     );
     $dstmt->bindValue(':b', $bucket, SQLITE3_INTEGER);
@@ -226,7 +235,8 @@ if ($hasDish) {
     $dlatest = $db->querySingle(
         'SELECT ts, uptime_s, sw, alerts, gps_sats, eth_mbps, tilt, azim, elev'
         . ($extra ? ', ' . implode(', ', $extra) : '') .
-        ' FROM dish WHERE error IS NULL ORDER BY ts DESC LIMIT 1', true) ?: null;
+        ' FROM dish WHERE error IS NULL' . $dw
+        . ' ORDER BY ts DESC LIMIT 1', true) ?: null;
     $outageTotal = 0;
     foreach ($drows as $r) { $outageTotal += $r['outage_s'] ?? 0; }
     $dish = [
@@ -296,6 +306,8 @@ if (is_file($cfgFile)) {
 
 echo json_encode([
     'range'      => $range,
+    'dishes'     => $dishList,
+    'dish_id'    => $dishId,
     'latest'     => count($ok) ? $ok[count($ok) - 1] : null,
     'stats'      => $stats,
     'usage'      => $usage,

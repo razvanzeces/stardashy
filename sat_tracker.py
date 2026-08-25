@@ -38,6 +38,10 @@ TLE_PATH = os.path.join(DATA_DIR, "starlink.tle")
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
 TLE_MAX_AGE_S = 12 * 3600
 
+# Satellite tracking follows the first configured dish. Two dishes at one
+# site see the same sky, and two at different sites need their own boresight
+# and location — that is a separate view, not an average, so it is left for
+# a later version rather than silently mixing them.
 TARGET = "192.168.100.1:9200"
 GRPCURL = None
 METHOD = "SpaceX.API.Device.Device/Handle"

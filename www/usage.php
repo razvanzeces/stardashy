@@ -35,6 +35,12 @@ $hasBytes = false;
 $r = $db->query("PRAGMA table_info(dish)");
 while ($c = $r->fetchArray(SQLITE3_ASSOC)) if ($c['name'] === 'bytes_down') $hasBytes = true;
 
+require_once __DIR__ . '/dishlib.php';
+$dishList = cfspeed_dishes($cfg);
+$dishId   = cfspeed_pick_dish($dishList, $_GET['dish'] ?? null);
+$dw = cfspeed_dish_where('', $dishId, cfspeed_has_dish_col($db, 'dish'));
+$ow = cfspeed_dish_where('', $dishId, cfspeed_has_dish_col($db, 'outages'));
+
 $range = $_GET['range'] ?? '30d';
 $spans = ['24h' => 86400, '7d' => 7 * 86400, '30d' => 30 * 86400, '90d' => 90 * 86400];
 $span  = $spans[$range] ?? $spans['30d'];
@@ -50,7 +56,7 @@ if ($hasBytes) {
                 SUM(COALESCE(bytes_down,0)) AS dn,
                 SUM(COALESCE(bytes_up,0))   AS up,
                 SUM(COALESCE(sample_s,0))   AS cov
-         FROM dish WHERE ts >= :s AND error IS NULL
+         FROM dish WHERE ts >= :s AND error IS NULL" . $dw . "
          GROUP BY d ORDER BY d");
     $q->bindValue(':s', $since, SQLITE3_INTEGER);
     $res = $q->execute();
@@ -71,7 +77,7 @@ if ($hasBytes) {
     $cq = $db->prepare(
         "SELECT SUM(COALESCE(bytes_down,0)) dn, SUM(COALESCE(bytes_up,0)) up,
                 SUM(COALESCE(sample_s,0)) cov
-         FROM dish WHERE ts >= :s AND error IS NULL");
+         FROM dish WHERE ts >= :s AND error IS NULL" . $dw);
     $cq->bindValue(':s', $cycleStart, SQLITE3_INTEGER);
     $c = $cq->execute()->fetchArray(SQLITE3_ASSOC) ?: [];
     $cycleTotal = (int) (($c['dn'] ?? 0) + ($c['up'] ?? 0));
@@ -82,7 +88,7 @@ if ($hasBytes) {
     $todayStart = strtotime('today');
     $tq = $db->prepare(
         "SELECT SUM(COALESCE(bytes_down,0)) dn, SUM(COALESCE(bytes_up,0)) up
-         FROM dish WHERE ts >= :s AND error IS NULL");
+         FROM dish WHERE ts >= :s AND error IS NULL" . $dw);
     $tq->bindValue(':s', $todayStart, SQLITE3_INTEGER);
     $t = $tq->execute()->fetchArray(SQLITE3_ASSOC) ?: [];
 
@@ -118,7 +124,7 @@ if ($hasBytes) {
    cannot say anything about the link, so that classification wins. */
 $q = $db->prepare(
     "SELECT ts, error, outage_s_60s, drop_rate_60s, fraction_obstructed
-     FROM dish WHERE ts >= :s ORDER BY ts");
+     FROM dish WHERE ts >= :s" . $dw . " ORDER BY ts");
 $q->bindValue(':s', $since, SQLITE3_INTEGER);
 $res = $q->execute();
 
@@ -131,7 +137,7 @@ $dishOutages = [];
 if ($hasOutageLog) {
     $oq = $db->prepare(
         'SELECT ts, cause, duration_s, did_switch FROM outages
-         WHERE ts >= :s ORDER BY ts');
+         WHERE ts >= :s' . $ow . ' ORDER BY ts');
     $oq->bindValue(':s', $since, SQLITE3_INTEGER);
     $ores = $oq->execute();
     while ($o = $ores->fetchArray(SQLITE3_ASSOC)) {
@@ -224,16 +230,18 @@ arsort($byCause);
    availability figure. */
 $observedMin = (int) ($db->querySingle(
     "SELECT COUNT(*) FROM dish WHERE ts >= " . (int) $since
-    . " AND error IS NULL") ?: 0);
+    . " AND error IS NULL" . $dw) ?: 0);
 $blindMin = (int) ($db->querySingle(
     "SELECT COUNT(*) FROM dish WHERE ts >= " . (int) $since
-    . " AND error IS NOT NULL") ?: 0);
+    . " AND error IS NOT NULL" . $dw) ?: 0);
 $observed = $observedMin * 60;
 $blind    = $blindMin * 60;
 $lost     = $totals['link_outage'];
 
 out([
     'range'     => $range,
+    'dishes'    => $dishList,
+    'dish_id'   => $dishId,
     'since'     => $since,
     'now'       => $now,
     'tz'        => $tz,

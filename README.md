@@ -42,6 +42,34 @@ Speed tests · dish telemetry · live satellite tracking · Telegram alerts — 
 - Keys `1`–`8` jump between views (ignored while typing in a field).
 - JS libraries are vendored locally with a CDN fallback, so the dashboard still loads when your link is down.
 
+## Multiple dishes
+
+Every Starlink dish answers on `192.168.100.1:9200`. That address is fixed in firmware, so two dishes reachable from one host are two different machines at the same address — and no software can tell them apart. **The network has to be made unambiguous first.** Pick whichever fits:
+
+| Approach | How | Suits |
+|---|---|---|
+| **DNAT on your router** | map `192.168.101.1 → dish A`, `192.168.102.1 → dish B` | OpenWrt, Mikrotik, pfSense — usually the easiest |
+| **VLAN or separate subnet** | one dish per VLAN | a managed switch |
+| **Network namespace** | one NIC per dish, each in its own netns | a host with two NICs |
+| **A collector per site** | reach each dish over SSH from the central host | dishes in different places — the common case |
+
+Then describe each dish in `config.json`:
+
+```json
+"dishes": [
+  {"id": "home",  "name": "Home",  "target": "192.168.100.1:9200"},
+  {"id": "barn",  "name": "Barn",  "target": "192.168.101.1:9200"},
+  {"id": "cabin", "name": "Cabin", "target": "192.168.100.1:9200",
+   "exec": "ssh pi@cabin", "location": {"lat": 46.5, "lon": 24.5}}
+]
+```
+
+`target` covers everything that gave the dish its own address. `exec` is a command prefix the gRPC call runs through, which covers namespaces, containers and remote hosts with one mechanism. Omit `dishes` entirely and nothing changes — a single-dish install keeps working exactly as before, and its existing history stays attached to it.
+
+A selector appears in the header once more than one dish is configured. Dish telemetry, energy, data usage and the outage timeline are all kept separate per dish, because averaging two links together produces numbers that describe neither. Speed tests and ICMP probes stay host-level: they measure whatever route the host takes, not a particular dish. Satellite tracking follows the first dish.
+
+> **`exec` is deliberately not editable from the dashboard.** It is a command prefix run by collectors that execute as root, so accepting one over HTTP would turn the admin password into a root shell. Edit it in `data/config.json` as someone who already has root on the box.
+
 ## Architecture
 
 ```mermaid
