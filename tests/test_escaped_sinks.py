@@ -16,6 +16,18 @@ FORBIDDEN = [
     "${hit.s.name}",
     "${r.values.join",
     "${d.name",
+    # added after the merge: same class, lower-trust-but-not-trusted sources —
+    # the dish (firmware string, outage cause), the GitHub releases API
+    # (release tag), TLE names in the runners-up line, and config-set ICMP
+    # labels, which are only self-inflicted but cost nothing to cover.
+    "${t.name} (",
+    "${d.sw}",
+    '"evkind ${cls}">${label}',
+    # innerHTML only — the textContent uses of latest.version are safe, and
+    # flagging those would train people to ignore this test.
+    "<b>v${latest.version}</b>",
+    "${t.label}",
+    "${t.host}",
 ]
 
 src = open(PATH, encoding="utf-8").read()

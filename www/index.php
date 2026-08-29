@@ -1639,7 +1639,7 @@ function renderSats(sats){
     <div class="usum"><div class="k">Distinct in Range</div>
       <div class="v">${sats.distinct}</div></div>`;
   $('satNote').textContent = top3.length > 1
-    ? 'Runners-up: ' + top3.slice(1).map(t => `${t.name} (${t.sep}°)`).join(' · ')
+    ? 'Runners-up: ' + top3.slice(1).map(t => `${esc(t.name)} (${t.sep}°)`).join(' · ')
     : 'TLE-inferred · updated 1 min';
 
   const seen = sats.seen || [];
@@ -2184,7 +2184,7 @@ async function pollLive(){
       `${ic.eth}Eth <b>${d.eth_mbps} Mbps</b>`,
       `${ic.obstr}Obstruction <b>${d.obstr_pct}%</b>`,
       `${ic.angle}Tilt <b>${d.tilt}°</b> · Az <b>${d.azim}°</b> · El <b>${d.elev}°</b>`,
-      `${ic.chip}FW <b>${d.sw}</b>`,
+      `${ic.chip}FW <b>${esc(d.sw)}</b>`,
     ].map(s => `<span>${s}</span>`).join('');
 
     const ar = $('dishAlerts');
@@ -2464,7 +2464,7 @@ function hzSyncTargets(){
   list.innerHTML = hzTargets.length
     ? hzTargets.map((t, i) => `
         <div class="tgtrow">
-          <span class="nm">${t.label}</span><span class="ip">${t.host}</span>
+          <span class="nm">${esc(t.label)}</span><span class="ip">${esc(t.host)}</span>
           <button class="rm" data-i="${i}" title="Remove">&times;</button>
         </div>`).join('')
     : '<div class="tgtrow"><span class="ip">No targets — the card stays hidden</span></div>';
@@ -2981,7 +2981,7 @@ function renderTimeline(d){
     const label = e.cause ? causeName(e.cause) : (TL_LABEL[e.kind] || e.kind);
     return `<tr>
       <td>${fmtFull(e.start)}</td>
-      <td><span class="evkind ${cls}">${label}</span>${
+      <td><span class="evkind ${cls}">${esc(label)}</span>${
         e.did_switch ? '<span class="mut" style="margin-left:8px">switched</span>' : ''}</td>
       <td class="r">${dur(e.duration_s)}</td>
       <td class="r dim">${e.worst_drop ? e.worst_drop + '%' : '–'}</td>
@@ -2997,7 +2997,7 @@ $('tlCanvas')?.addEventListener('mousemove', ev => {
   const mx = ev.clientX - r.left;
   const hit = TL.hit.find(h => mx >= h.x0 - 2 && mx <= h.x1 + 2);
   $('tlCap').innerHTML = hit
-    ? `<b>${hit.e.cause ? causeName(hit.e.cause) : TL_LABEL[hit.e.kind]}</b>`
+    ? `<b>${esc(hit.e.cause ? causeName(hit.e.cause) : TL_LABEL[hit.e.kind])}</b>`
       + ` · ${fmtFull(hit.e.start)} · lasted <b>${dur(hit.e.duration_s)}</b>`
       + (hit.e.worst_drop ? ` · worst drop ${hit.e.worst_drop}%` : '')
     : (USG.data
@@ -3329,7 +3329,7 @@ function updRender(d){
     $('updState').innerHTML = d.offline
       ? 'Could not reach GitHub — check again when you are back online'
       : (avail
-          ? `New version <b>v${latest.version}</b> available${latest.published_at
+          ? `New version <b>v${esc(latest.version)}</b> available${latest.published_at
               ? ' · released ' + new Date(latest.published_at).toLocaleDateString() : ''}`
           : 'You are running the latest version');
     const notes = avail && latest.notes ? latest.notes.trim() : '';
@@ -3344,7 +3344,7 @@ function updRender(d){
     bar.classList.toggle('on', show);
     if (show)
       $('updBarTxt').innerHTML =
-        `Version <b>v${latest.version}</b> is available — you are on v${cur}`;
+        `Version <b>v${esc(latest.version)}</b> is available — you are on v${esc(cur)}`;
   }
 
   updRenderStatus(d.status);
