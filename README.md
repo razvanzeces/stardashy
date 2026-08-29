@@ -98,6 +98,16 @@ Everything is file-based: one SQLite DB, one JSON config, no daemons of its own 
 - "Last test" counts up in real time rather than showing a fixed clock time, so a stalled collector is obvious.
 - Keys `1`–`7` jump between views (ignored while typing in a field).
 
+## Security
+
+The dashboard is a LAN tool, not something to expose to the internet, but the trust boundaries inside it are still real:
+
+- **Collectors do not run as root.** The five that poll the dish, run speed tests, ping and send alerts run as a dedicated `cfspeed` system user under a systemd sandbox (`ProtectSystem=strict`, `PrivateTmp`, empty capability bounding set, `SystemCallFilter=@system-service`). Only the two units that replace program files and write systemd overrides keep root, and the web server can queue work for them but never execute it.
+- **Third-party strings are escaped at render.** Reverse DNS and ASN descriptions are controlled by whoever operates the address or the hop, not by you, and they are interpolated into the admin's page. Every such sink goes through an escaping helper, with server-side validation as a second layer. `tests/test_escaped_sinks.py` fails the build if that regresses.
+- **Dish endpoints are not writable from the dashboard.** A dish entry can carry an `exec` prefix that collectors run; accepting one over HTTP would make the admin password a path to a root shell.
+
+Found something? Open an issue. [#1](https://github.com/razvanzeces/stardashy/issues/1) and [#2](https://github.com/razvanzeces/stardashy/issues/2) were both reported and fixed by [@theelderemo](https://github.com/theelderemo).
+
 ## Requirements
 
 - Linux with systemd (built for Raspberry Pi OS, runs anywhere)
