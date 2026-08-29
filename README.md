@@ -192,6 +192,7 @@ Everything lives in `data/config.json` and is editable from the **Settings** tab
 - `api.php`, `sky.php`, `dish_live.php` are **unauthenticated** (the debug tools and settings are password-gated). They expose your WAN IP history and your approximate location (rounded per `publish_precision`). Fine on a LAN — if you expose the dashboard to the internet, put HTTP auth or a VPN in front of it.
 - Secrets (Telegram token, password hash, coordinates) live only in `data/`, which is `.gitignore`d — never commit it.
 - The admin password is stored as a PHP `password_hash()` in `data/auth.json`.
+- The collector units run as the unprivileged system user `cfspeed` under systemd sandboxing (`ProtectSystem=strict`, `NoNewPrivileges`, writes confined to `data/`); the two ping-based collectors keep only `CAP_NET_RAW`. Only `cfspeed-apply` and `cfspeed-update` run as root, because they rewrite systemd units and reinstall the tree. Multi-dish `exec` prefixes run under the same sandbox — deployments that need network namespaces or ssh keys can relax the dish unit with a drop-in (`systemctl edit cfspeed-dish.service`).
 
 ## FAQ
 

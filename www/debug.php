@@ -155,6 +155,14 @@ function asn_lookup(string $ip): array {
             }
         }
     }
+    if ($res['org'] !== null) {
+        $org = substr(trim((string) preg_replace('/[<>"\'\x00-\x1F\x7F]/', '', $res['org'])), 0, 120);
+        $res['org'] = $org === '' ? null : $org;
+    }
+    if ($res['cc'] !== null && !preg_match('/^[A-Za-z]{2}$/', $res['cc']))
+        $res['cc'] = null;
+    if ($res['prefix'] !== null && !preg_match('/^[0-9A-Fa-f.:\/]{1,64}$/', $res['prefix']))
+        $res['prefix'] = null;
     $cache[$ip] = $res;
     @file_put_contents(ASN_CACHE, json_encode($cache));
     return $res;
@@ -264,7 +272,9 @@ case 'mtr': {
     foreach ($hops as &$h) {
         if ($h['ip'] && $h['ip'] !== '???') {
             $h['ptr'] = (function($ip){ $p = @gethostbyaddr($ip);
-                return ($p !== false && $p !== $ip) ? $p : null; })($h['ip']);
+                return ($p !== false && $p !== $ip
+                    && preg_match('/^[A-Za-z0-9]([A-Za-z0-9._\-]{0,251}[A-Za-z0-9])?$/', $p))
+                    ? $p : null; })($h['ip']);
             $h += asn_lookup($h['ip']);
         } else {
             $h['ip'] = null; $h['ptr'] = null;
@@ -320,10 +330,10 @@ case 'get_config':
 case 'save_config': {
     require_auth();
     /* Dish endpoints are deliberately not writable from here.
-       A dish entry can carry an "exec" prefix that the collectors run as
-       root, so accepting one over HTTP would turn the dashboard password
-       into a root shell. Endpoints are edited in data/config.json by
-       someone who already has root on the box. */
+       A dish entry can carry an "exec" prefix that the collectors execute
+       (as the sandboxed, unprivileged cfspeed user), so accepting one over
+       HTTP would still turn the dashboard password into command execution.
+       Endpoints are edited in data/config.json by an admin on the box. */
     $c = load_config();
     $n = $in['config'] ?? [];
     $iv = $n['intervals'] ?? [];

@@ -1329,6 +1329,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
 
 <script>
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let range = '24h';
 let activeView = 'dash';
 const charts = {};
@@ -1579,7 +1580,7 @@ function render(data){
     const time = `<td>${fmtFull(t.ts)}</td>`;
     if (fail){
       return `<tr>${time}
-        <td class="r dim" colspan="10"><span class="mut">${t.error}</span></td>
+        <td class="r dim" colspan="10"><span class="mut">${esc(t.error)}</span></td>
         <td class="dim">${t.colo ?? '–'}</td>
         <td><span class="st-fail">FAIL</span></td></tr>`;
     }
@@ -1605,7 +1606,7 @@ function render(data){
   $('ipBody').innerHTML = ips.map(i => `
     <tr>
       <td>${i.ip}${i.current ? '<span class="ip-current">CURRENT</span>' : ''}</td>
-      <td class="dim">${i.hostname || '<span class="mut">no PTR</span>'}</td>
+      <td class="dim">${i.hostname ? esc(i.hostname) : '<span class="mut">no PTR</span>'}</td>
       <td class="dim">${fmtFull(i.first_seen)}</td>
       <td class="dim">${fmtFull(i.last_seen)}</td>
       <td class="r">${i.tests}</td>
@@ -1644,7 +1645,7 @@ function renderSats(sats){
   const seen = sats.seen || [];
   $('satBody').innerHTML = seen.map(s => `
     <tr>
-      <td>${s.name}</td>
+      <td>${esc(s.name)}</td>
       <td class="r dim">${s.norad ?? '–'}</td>
       <td class="r">${s.minutes}</td>
       <td class="r dim">${s.min_sep ?? '–'}°</td>
@@ -1846,7 +1847,7 @@ $('skyMap').addEventListener('mousemove', ev => {
     if (dd < dmin){ dmin = dd; hit = p; }
   }
   $('skyCap').innerHTML = hit
-    ? `<b>${hit.s.name}</b> \u00b7 NORAD ${hit.s.norad} \u00b7 ` +
+    ? `<b>${esc(hit.s.name)}</b> \u00b7 NORAD ${hit.s.norad} \u00b7 ` +
       `Az ${hit.s.az}\u00b0 El ${hit.s.el}\u00b0 \u00b7 ` +
       `Sep ${hit.s.sep}\u00b0 \u00b7 ${hit.s.rng} km` +
       (hit.best ? ' \u00b7 SERVING CANDIDATE' : '')
@@ -2127,7 +2128,7 @@ $('geoMap').addEventListener('mousemove', ev => {
     if (d < dmin){ dmin = d; hit = p; }
   }
   $('geoCap').innerHTML = hit
-    ? `<b>${hit.s.name}</b> \u00b7 NORAD ${hit.s.norad} \u00b7 ` +
+    ? `<b>${esc(hit.s.name)}</b> \u00b7 NORAD ${hit.s.norad} \u00b7 ` +
       `${hit.lat.toFixed(2)}\u00b0 ${hit.lon.toFixed(2)}\u00b0 \u00b7 ` +
       `Alt ${hit.alt.toFixed(0)} km \u00b7 ` +
       `Ground ${haversineKm(GEO.lat0, GEO.lon0, hit.lat, hit.lon).toFixed(0)} km \u00b7 ` +
@@ -2351,7 +2352,7 @@ function renderMtr(d){
   $('mtrHops').innerHTML = d.hops.map(h => {
     const lost = h.ip == null;
     const asn = h.asn
-      ? `<span class="asn"><b>AS${h.asn}</b>${h.org ? ' \u00b7 ' + h.org : ''}${h.cc ? ' \u00b7 ' + h.cc : ''}</span>`
+      ? `<span class="asn"><b>AS${h.asn}</b>${h.org ? ' \u00b7 ' + esc(h.org) : ''}${h.cc ? ' \u00b7 ' + esc(h.cc) : ''}</span>`
       : (lost ? '' : `<span class="asn">NO ASN</span>`);
     const stats = lost ? `<div class="h-stats"><span class="lossy">Loss <b>100%</b></span></div>` : `
       <div class="h-stats">
@@ -2372,7 +2373,7 @@ function renderMtr(d){
           <span class="h-n">HOP ${String(h.hop).padStart(2, '0')}</span>
           <span class="h-ip">${lost ? '\u2014 no reply \u2014' : h.ip}</span>
           ${asn}
-          ${h.ptr ? `<span class="h-ptr">${h.ptr}</span>` : ''}
+          ${h.ptr ? `<span class="h-ptr">${esc(h.ptr)}</span>` : ''}
         </div>
         ${stats}
       </div>
@@ -2385,7 +2386,7 @@ function renderDns(d){
   $('dnsTitle').textContent = d.target;
   $('dnsBody').innerHTML = (d.records || []).map(r => `
     <tr><td>${r.type}</td>
-    <td class="dim" style="white-space:normal">${r.values.join('<br>')}</td>
+    <td class="dim" style="white-space:normal">${r.values.map(esc).join('<br>')}</td>
     <td class="r">${r.ms} <span class="mut">ms</span></td></tr>`).join('')
     || `<tr><td colspan="3" class="empty">No records</td></tr>`;
 }
@@ -3040,7 +3041,7 @@ function renderDishSel(list){
   if (!same || el.dataset.n !== String(list.length)){
     el.dataset.n = String(list.length);
     el.innerHTML = '<span class="lbl">Dish</span>' + list.map(d =>
-      `<button data-dish="${d.id}">${d.name || d.id}</button>`).join('');
+      `<button data-dish="${d.id}">${esc(d.name || d.id)}</button>`).join('');
     el.querySelectorAll('button').forEach(b =>
       b.addEventListener('click', () => {
         if (b.dataset.dish === DISH) return;

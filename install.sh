@@ -30,6 +30,11 @@ if ! python3 -c 'import sgp4' 2>/dev/null; then
 fi
 command -v php >/dev/null || say "WARNING: php not found — the dashboard needs php-fpm/php-cli + php-sqlite3"
 
+if ! getent passwd cfspeed >/dev/null; then
+  useradd --system --user-group --home-dir "$DEST" --no-create-home --shell /usr/sbin/nologin cfspeed
+  say "created system user cfspeed"
+fi
+
 # ---------- files ----------
 # Running the installer from inside the install directory (a clone made
 # straight into $DEST) is supported: there is simply nothing to copy.
@@ -61,10 +66,11 @@ fi
 
 # web server (PHP) must be able to write config/auth/caches in data/
 if getent group "$WEBGROUP" >/dev/null; then
-  chgrp -R "$WEBGROUP" "$DEST/data"
+  chown -R cfspeed:"$WEBGROUP" "$DEST/data"
   chmod 2775 "$DEST/data"
   chmod g+w "$DEST/data"/*.json 2>/dev/null || true
 else
+  chown -R cfspeed "$DEST/data"
   say "WARNING: group '$WEBGROUP' not found — make $DEST/data writable by your web server"
 fi
 

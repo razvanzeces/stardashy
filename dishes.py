@@ -21,10 +21,10 @@ So a dish here is not an address but a description of how to reach it:
 namespaces (`ip netns exec dish-b`), remote hosts (`ssh pi@cabin`) and
 containers with one mechanism.
 
-SECURITY: `exec` is arbitrary command execution and the collectors run as
-root. It is therefore file-only — debug.php refuses to write it, so a
-compromised dashboard password cannot turn into a root shell. Anyone editing
-it already needs root on the box.
+SECURITY: `exec` is arbitrary command execution, so it stays file-only —
+debug.php refuses to write it. The collectors run as the unprivileged,
+sandboxed `cfspeed` user, so a compromised dashboard password — or a web
+process writing config.json directly — yields at most that user, not root.
 """
 import json
 import os
